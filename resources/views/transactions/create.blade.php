@@ -12,7 +12,11 @@
                     <form method="POST" action="{{ route('transactions.store') }}">
                         @csrf
 
-                        @include('transactions.partials.form', ['transaction' => $transaction, 'types' => $types])
+                        @include('transactions.partials.form', [
+                            'transaction' => $transaction,
+                            'types' => $types,
+                            'categories' => $categories,
+                        ])
                     </form>
                 </div>
             </div>

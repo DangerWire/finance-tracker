@@ -312,6 +312,79 @@ class TransactionTest extends TestCase
         ]);
     }
 
+    public function test_category_dropdown_lists_categories_the_user_has_used(): void
+    {
+        $user = User::factory()->create();
+
+        Transaction::factory()->for($user)->create(['category' => 'groceries']);
+        Transaction::factory()->for($user)->create(['category' => 'commuting']);
+
+        $this->actingAs($user)
+            ->get(route('transactions.index'))
+            ->assertViewHas('categories', ['commuting', 'groceries']);
+    }
+
+    public function test_category_dropdown_excludes_other_users_categories(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+
+        Transaction::factory()->for($user)->create(['category' => 'mine']);
+        Transaction::factory()->for($other)->create(['category' => 'theirs']);
+
+        $this->actingAs($user)
+            ->get(route('transactions.index'))
+            ->assertViewHas('categories', ['mine']);
+    }
+
+    public function test_newly_used_category_appears_in_the_dropdown(): void
+    {
+        config(['finance.base_currency' => 'IDR']);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->get(route('transactions.index'))
+            ->assertViewHas('categories', []);
+
+        $this->actingAs($user)->post(route('transactions.store'), [
+            'type' => 'expense',
+            'amount' => 100,
+            'currency' => 'IDR',
+            'occurred_at' => '2026-10-06 12:00:00',
+            'category' => 'bubble tea',
+        ]);
+
+        // Typing a new category is all that is needed for it to be offered.
+        $this->actingAs($user)
+            ->get(route('transactions.index'))
+            ->assertViewHas('categories', ['bubble tea']);
+    }
+
+    public function test_create_form_offers_known_categories(): void
+    {
+        $user = User::factory()->create();
+
+        Transaction::factory()->for($user)->create(['category' => 'housing']);
+
+        $this->actingAs($user)
+            ->get(route('transactions.create'))
+            ->assertOk()
+            ->assertSee('value="housing"', false);
+    }
+
+    public function test_index_can_filter_by_category(): void
+    {
+        $user = User::factory()->create();
+
+        Transaction::factory()->for($user)->count(2)->create(['category' => 'food']);
+        Transaction::factory()->for($user)->create(['category' => 'transport']);
+
+        $this->actingAs($user)
+            ->get(route('transactions.index', ['category' => 'food']))
+            ->assertOk()
+            ->assertViewHas('transactions', fn ($paginator) => $paginator->total() === 2);
+    }
+
     public function test_user_can_update_and_delete_own_transaction(): void
     {
         $user = User::factory()->create();

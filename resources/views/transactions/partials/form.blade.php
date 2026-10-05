@@ -43,7 +43,7 @@
         <input id="category" name="category" type="text" list="category-options" class="{{ $fieldClass }}"
             value="{{ old('category', $transaction->category) }}">
         <datalist id="category-options">
-            @foreach (['food', 'transport', 'housing', 'entertainment', 'utilities', 'salary'] as $option)
+            @foreach ($categories as $option)
                 <option value="{{ $option }}"></option>
             @endforeach
         </datalist>

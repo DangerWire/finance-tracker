@@ -7,6 +7,7 @@ use App\Enums\TransactionType;
 use App\Http\Requests\StoreTransactionRequest;
 use App\Http\Requests\UpdateTransactionRequest;
 use App\Models\Transaction;
+use App\Services\CategoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,7 +17,7 @@ class TransactionController extends Controller
     /**
      * Display a listing of the authenticated user's transactions.
      */
-    public function index(Request $request): View
+    public function index(Request $request, CategoryService $categories): View
     {
         $transactions = $request->user()
             ->transactions()
@@ -47,17 +48,19 @@ class TransactionController extends Controller
             'baseCurrency' => config('finance.base_currency'),
             'unconvertedCount' => $request->user()->transactions()->whereNull('base_amount')->count(),
             'types' => TransactionType::cases(),
+            'categories' => $categories->forUser($request->user()->id),
         ]);
     }
 
     /**
      * Show the form for creating a new transaction.
      */
-    public function create(): View
+    public function create(Request $request, CategoryService $categories): View
     {
         return view('transactions.create', [
             'transaction' => new Transaction(['currency' => 'CNY', 'type' => TransactionType::Expense]),
             'types' => TransactionType::cases(),
+            'categories' => $categories->forUser($request->user()->id),
         ]);
     }
 
@@ -90,13 +93,14 @@ class TransactionController extends Controller
     /**
      * Show the form for editing the given transaction.
      */
-    public function edit(Request $request, Transaction $transaction): View
+    public function edit(Request $request, Transaction $transaction, CategoryService $categories): View
     {
         $this->authorizeOwnership($request, $transaction);
 
         return view('transactions.edit', [
             'transaction' => $transaction,
             'types' => TransactionType::cases(),
+            'categories' => $categories->forUser($request->user()->id),
         ]);
     }
 

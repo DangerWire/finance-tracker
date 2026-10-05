@@ -13,7 +13,11 @@
                         @csrf
                         @method('PUT')
 
-                        @include('transactions.partials.form', ['transaction' => $transaction, 'types' => $types])
+                        @include('transactions.partials.form', [
+                            'transaction' => $transaction,
+                            'types' => $types,
+                            'categories' => $categories,
+                        ])
                     </form>
 
                     <div class="mt-8 border-t border-gray-200 pt-6">

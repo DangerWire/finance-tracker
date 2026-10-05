@@ -66,9 +66,15 @@
 
                 <div>
                     <x-input-label for="filter-category" :value="__('Category')" />
-                    <input id="filter-category" name="category" type="text"
-                        class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        value="{{ request('category') }}">
+                    <select id="filter-category" name="category"
+                        class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">{{ __('All') }}</option>
+                        @foreach ($categories as $category)
+                            <option value="{{ $category }}" @selected(request('category') === $category)>
+                                {{ $category }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
 
                 <x-primary-button>{{ __('Apply') }}</x-primary-button>
