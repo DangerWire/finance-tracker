@@ -21,11 +21,15 @@
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div class="bg-white p-4 shadow-sm sm:rounded-lg">
                     <p class="text-sm text-gray-500">{{ __('Income') }}</p>
-                    <p class="mt-1 text-2xl font-semibold text-emerald-600">{{ number_format($income, 2) }}</p>
+                    <p class="mt-1 text-2xl font-semibold text-emerald-600">{{ number_format($income, 2) }}
+                        <span class="text-sm font-normal text-gray-400">{{ $baseCurrency }}</span>
+                    </p>
                 </div>
                 <div class="bg-white p-4 shadow-sm sm:rounded-lg">
                     <p class="text-sm text-gray-500">{{ __('Expenses') }}</p>
-                    <p class="mt-1 text-2xl font-semibold text-rose-600">{{ number_format($expenses, 2) }}</p>
+                    <p class="mt-1 text-2xl font-semibold text-rose-600">{{ number_format($expenses, 2) }}
+                        <span class="text-sm font-normal text-gray-400">{{ $baseCurrency }}</span>
+                    </p>
                 </div>
                 <div class="bg-white p-4 shadow-sm sm:rounded-lg">
                     <p class="text-sm text-gray-500">{{ __('Balance') }}</p>
@@ -33,9 +37,17 @@
                         'mt-1 text-2xl font-semibold',
                         'text-emerald-600' => $balance >= 0,
                         'text-rose-600' => $balance < 0,
-                    ])>{{ number_format($balance, 2) }}</p>
+                    ])>{{ number_format($balance, 2) }}
+                        <span class="text-sm font-normal text-gray-400">{{ $baseCurrency }}</span>
+                    </p>
                 </div>
             </div>
+
+@if ($unconvertedCount > 0)
+                <div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3">
+                    {{ trans_choice(':count transaction could not be converted to :currency and is excluded from these totals. Run finance:backfill-base-amounts once a rate is available.', $unconvertedCount, ['count' => $unconvertedCount, 'currency' => $baseCurrency]) }}
+                </div>
+            @endif
 
             <form method="GET" action="{{ route('transactions.index') }}"
                 class="bg-white p-4 shadow-sm sm:rounded-lg flex flex-wrap items-end gap-4">
@@ -105,6 +117,13 @@
                                     ])>
                                         {{ $transaction->type->sign() > 0 ? '+' : '−' }}{{ number_format($transaction->amount, 2) }}
                                         <span class="text-xs text-gray-400">{{ $transaction->currency }}</span>
+                                        @if ($transaction->base_amount !== null && $transaction->currency !== $transaction->base_currency)
+                                            <br>
+                                            <span class="text-xs font-normal text-gray-400">
+                                                {{ $transaction->type->sign() > 0 ? '+' : '−' }}{{ number_format($transaction->base_amount, 2) }}
+                                                {{ $transaction->base_currency }}
+                                            </span>
+                                        @endif
                                     </td>
                                     <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
                                         <a href="{{ route('transactions.show', $transaction) }}"

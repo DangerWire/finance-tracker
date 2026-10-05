@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\ConvertTransactionAmount;
 use App\Enums\TransactionType;
 use App\Http\Requests\StoreTransactionRequest;
 use App\Http\Requests\UpdateTransactionRequest;
@@ -25,19 +26,26 @@ class TransactionController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        // Totals are summed from the frozen base snapshot rather than the
+        // original amount, so mixed currencies never add up incorrectly.
         $summary = $request->user()->transactions()
-            ->selectRaw('type, SUM(amount) as total')
+            ->whereNotNull('base_amount')
+            ->selectRaw('type, SUM(base_amount) as total')
             ->groupBy('type')
             ->pluck('total', 'type');
 
-        $income = (float) ($summary[TransactionType::Income->value] ?? 0);
-        $expenses = (float) ($summary[TransactionType::Expense->value] ?? 0);
+        // Rounded to the precision the base snapshot is stored at, so totals do
+        // not display float noise such as 16025.940000000002.
+        $income = round((float) ($summary[TransactionType::Income->value] ?? 0), 4);
+        $expenses = round((float) ($summary[TransactionType::Expense->value] ?? 0), 4);
 
         return view('transactions.index', [
             'transactions' => $transactions,
             'income' => $income,
             'expenses' => $expenses,
-            'balance' => $income - $expenses,
+            'balance' => round($income - $expenses, 4),
+            'baseCurrency' => config('finance.base_currency'),
+            'unconvertedCount' => $request->user()->transactions()->whereNull('base_amount')->count(),
             'types' => TransactionType::cases(),
         ]);
     }
@@ -56,9 +64,11 @@ class TransactionController extends Controller
     /**
      * Store a newly created transaction.
      */
-    public function store(StoreTransactionRequest $request): RedirectResponse
+    public function store(StoreTransactionRequest $request, ConvertTransactionAmount $convert): RedirectResponse
     {
-        $request->user()->transactions()->create($request->validated());
+        $attributes = $convert->apply($request->validated());
+
+        $request->user()->transactions()->create($attributes);
 
         return redirect()
             ->route('transactions.index')
@@ -93,11 +103,15 @@ class TransactionController extends Controller
     /**
      * Update the given transaction.
      */
-    public function update(UpdateTransactionRequest $request, Transaction $transaction): RedirectResponse
+    public function update(UpdateTransactionRequest $request, Transaction $transaction, ConvertTransactionAmount $convert): RedirectResponse
     {
         $this->authorizeOwnership($request, $transaction);
 
-        $transaction->update($request->validated());
+        // Re-derive the base snapshot so an edited amount, currency, or date
+        // cannot leave the converted total stale.
+        $transaction->fill($convert->apply($request->validated()));
+
+        $transaction->save();
 
         return redirect()
             ->route('transactions.index')

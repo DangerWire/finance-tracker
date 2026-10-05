@@ -33,6 +33,18 @@
 
                         <dt class="text-gray-500">{{ __('Note') }}</dt>
                         <dd>{{ $transaction->note ?? '—' }}</dd>
+
+                        @if ($transaction->base_amount !== null && $transaction->currency !== $transaction->base_currency)
+                            <dt class="text-gray-500">{{ __('In base currency') }}</dt>
+                            <dd>
+                                {{ number_format($transaction->base_amount, 2) }} {{ $transaction->base_currency }}
+                                <span class="block text-xs text-gray-400">
+                                    {{ __('Rate applied') }}: 1 {{ $transaction->currency }} =
+                                    {{ rtrim(rtrim(number_format((float) $transaction->applied_rate, 4, '.', ''), '0'), '.') }}
+                                    {{ $transaction->base_currency }}
+                                </span>
+                            </dd>
+                        @endif
                     </dl>
 
                     <div class="flex items-center gap-4 border-t border-gray-100 pt-4">
