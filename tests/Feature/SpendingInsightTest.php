@@ -5,10 +5,13 @@ namespace Tests\Feature;
 use App\Enums\TransactionType;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\SpendingInsightService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use LogicException;
 use Prism\Prism\Enums\Provider;
 use Prism\Prism\Facades\Prism;
 use Prism\Prism\Testing\StructuredResponseFake;
+use RuntimeException;
 use Tests\TestCase;
 
 class SpendingInsightTest extends TestCase
@@ -89,17 +92,30 @@ class SpendingInsightTest extends TestCase
 
     public function test_provider_failures_are_shown_to_the_user(): void
     {
-        config(['insights.api_key' => 'test-key']);
+        // Asserted without touching the network: an unconfigured key is the
+        // failure users actually hit, and relying on a live call failing
+        // would make this test depend on the provider being unavailable.
+        config(['insights.api_key' => null]);
 
         $user = $this->userWithSpending(10);
 
-        // No Prism fake is registered, so the real provider is attempted and
-        // fails without network access.
         $this->actingAs($user)
             ->from(route('insights.index'))
             ->post(route('insights.generate'))
             ->assertRedirect(route('insights.index'))
             ->assertSessionHasErrors('insights');
+    }
+
+    public function test_failure_descriptions_never_leak_internals(): void
+    {
+        $message = SpendingInsightService::describeFailure(new RuntimeException('upstream 503 from provider'));
+
+        $this->assertSame('upstream 503 from provider', $message);
+
+        $generic = SpendingInsightService::describeFailure(new LogicException('stack trace and paths'));
+
+        $this->assertStringContainsString('OPENROUTER_API_KEY', $generic);
+        $this->assertStringNotContainsString('stack trace', $generic);
     }
 
     public function test_the_model_is_never_given_a_reasoning_task(): void

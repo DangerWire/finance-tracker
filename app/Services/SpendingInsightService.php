@@ -115,9 +115,24 @@ class SpendingInsightService
             '- Do not state a percentage change unless a change_percent field is present and not null.',
             '- If current_period.is_partial is true, the month is incomplete. Say so rather than implying a trend.',
             '- Do not invent categories, dates, merchants or amounts that are not in the data.',
+            '- Never mention JSON field names or raw values such as is_unusual, change_percent or share_of_spend_percent. Describe them in plain language instead.',
+            '- If current_period.expenses is null, the figures are in the currencies they were recorded in and must NOT be added together. Report each currency separately.',
             '- If the data is too thin to support an insight, return fewer insights. An empty list is better than a guess.',
             '- Be concise and concrete. No generic advice about budgeting.',
+            '',
+            'Write every insight in the following language: '.$this->outputLanguageInstruction().'.',
         ]);
+    }
+
+    /**
+     * The language the generated text must be written in.
+     */
+    private function outputLanguageInstruction(): string
+    {
+        return match (app()->getLocale()) {
+            'id' => 'Indonesian (Bahasa Indonesia)',
+            default => 'English',
+        };
     }
 
     /**
