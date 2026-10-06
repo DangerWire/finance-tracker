@@ -13,30 +13,6 @@
                 </div>
             @endif
 
-            <div class="bg-white p-4 shadow-sm sm:rounded-lg">
-                <form method="POST" action="{{ route('insights.preference') }}" class="flex flex-wrap items-center gap-4">
-                    @csrf
-                    @method('PUT')
-
-                    <label for="prefers_base_currency" class="flex items-center gap-2 text-sm text-gray-700">
-                        <input id="prefers_base_currency" name="prefers_base_currency" type="checkbox" value="1"
-                            @checked($convert)
-                            onchange="this.form.submit()"
-                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
-                        <span>
-                            {{ __('Convert CNY to my base currency') }}
-                            <span class="block text-xs text-gray-500">
-                                {{ __('Off shows each currency separately instead of one combined total.') }}
-                            </span>
-                        </span>
-                    </label>
-
-                    <noscript>
-                        <x-primary-button>{{ __('Save') }}</x-primary-button>
-                    </noscript>
-                </form>
-            </div>
-
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div class="bg-white p-4 shadow-sm sm:rounded-lg">
                     <p class="text-sm text-gray-500">
@@ -48,32 +24,21 @@
                         @endif
                     </p>
 
-                    @if ($convert)
-                        <p class="mt-1 text-2xl font-semibold text-gray-900">
-                            {{ number_format($stats['current_period']['expenses'], 0) }}
-                            <span class="text-sm font-normal text-gray-400">{{ $stats['display_currency'] }}</span>
+                    <p class="mt-1 text-2xl font-semibold text-gray-900">
+                        {{ number_format($stats['current_period']['expenses'], 0) }}
+                        <span class="text-sm font-normal text-gray-400">{{ $stats['display_currency'] }}</span>
+                    </p>
+
+                    @if ($stats['previous_period']['change_percent'] !== null)
+                        <p @class([
+                            'mt-1 text-xs font-medium',
+                            'text-rose-600' => $stats['previous_period']['change_percent'] > 0,
+                            'text-emerald-600' => $stats['previous_period']['change_percent'] <= 0,
+                        ])>
+                            {{ $stats['previous_period']['change_percent'] > 0 ? '↑' : '↓' }}
+                            {{ number_format(abs($stats['previous_period']['change_percent']), 1) }}%
+                            <span class="font-normal text-gray-400">{{ __('vs :month', ['month' => $stats['previous_period']['label']]) }}</span>
                         </p>
-                        @if ($stats['previous_period']['change_percent'] !== null)
-                            <p @class([
-                                'mt-1 text-xs font-medium',
-                                'text-rose-600' => $stats['previous_period']['change_percent'] > 0,
-                                'text-emerald-600' => $stats['previous_period']['change_percent'] <= 0,
-                            ])>
-                                {{ $stats['previous_period']['change_percent'] > 0 ? '↑' : '↓' }}
-                                {{ number_format(abs($stats['previous_period']['change_percent']), 1) }}%
-                                <span class="font-normal text-gray-400">{{ __('vs :month', ['month' => $stats['previous_period']['label']]) }}</span>
-                            </p>
-                        @endif
-                    @else
-                        @foreach ($stats['currencies'] as $currencyTotal)
-                            <p class="mt-1 text-2xl font-semibold text-gray-900">
-                                {{ number_format($currencyTotal['total'], 0) }}
-                                <span class="text-sm font-normal text-gray-400">{{ $currencyTotal['currency'] }}</span>
-                            </p>
-                        @endforeach
-                        @if ($stats['currencies'] === [])
-                            <p class="mt-1 text-2xl font-semibold text-gray-400">—</p>
-                        @endif
                     @endif
                 </div>
 
@@ -163,7 +128,7 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Spent') }}</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">{{ __('Share') }}</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                                    {{ $convert ? __('Change') : __('Change vs last month') }}
+                                    {{ __('Change vs last month') }}
                                 </th>
                             </tr>
                         </thead>

@@ -49,45 +49,170 @@
                 </div>
             @endif
 
-            <form method="GET" action="{{ route('transactions.index') }}"
-                class="bg-white p-4 shadow-sm sm:rounded-lg flex flex-wrap items-end gap-4">
-                <div>
-                    <x-input-label for="filter-type" :value="__('Filter by type')" />
-                    <select id="filter-type" name="type"
-                        class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">{{ __('All') }}</option>
-                        @foreach ($types as $type)
-                            <option value="{{ $type->value }}" @selected(request('type') === $type->value)>
-                                {{ $type->label() }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+            @php
+    $activeFilters = collect([
+        'type' => request('type'),
+        'category' => request('category'),
+        'date' => $day ?? null,
+        'from' => $from ?? null,
+        'to' => $to ?? null,
+    ])->filter(fn ($value): bool => $value !== null && $value !== '');
 
-                <div>
-                    <x-input-label for="filter-category" :value="__('Category')" />
-                    <select id="filter-category" name="category"
-                        class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">{{ __('All') }}</option>
-                        @foreach ($categories as $category)
-                            <option value="{{ $category }}" @selected(request('category') === $category)>
-                                {{ $category }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+    // The panel has to survive navigation that changes nothing about the
+    // filters. Paging the calendar only moves `month`, and changing the layout
+    // only sets `group`, so without this marker either action would collapse
+    // the panel out from under the user mid-interaction.
+    //
+    // `panel` rides along on every control inside the panel, which is exactly
+    // when it should stay open. Reset deliberately omits it, returning to the
+    // default collapsed view.
+    $panelOpen = $activeFilters->isNotEmpty()
+        || request()->filled('panel')
+        || request()->filled('month');
+@endphp
 
-                <x-primary-button>{{ __('Apply') }}</x-primary-button>
+<details id="filter-panel" @if ($panelOpen) open @endif
+    class="bg-white shadow-sm sm:rounded-lg">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <span class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-800">{{ __('Filters') }}</span>
+            @if ($activeFilters->isNotEmpty())
+                <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                    {{ trans_choice(':count filter applied|:count filters applied', $activeFilters->count(), ['count' => $activeFilters->count()]) }}
+                </span>
+            @endif
+        </span>
+        <span class="text-xs text-gray-400">{{ __('Show or hide') }}</span>
+    </summary>
 
-                @if (request()->hasAny(['type', 'category']))
-                    <a href="{{ route('transactions.index') }}" class="text-sm text-gray-600 hover:text-gray-900">
-                        {{ __('Reset') }}
-                    </a>
-                @endif
-            </form>
+    <form id="transaction-filters" method="GET" action="{{ route('transactions.index') }}"
+        class="flex flex-wrap items-end gap-4 border-t border-gray-100 px-4 py-4">
+        {{-- Sent with every change made inside the panel, so the panel stays
+             open across a filter change or a date selection. --}}
+        <input type="hidden" name="panel" value="1">
+
+        <div>
+            <x-input-label for="filter-type" :value="__('Filter by type')" />
+            <select id="filter-type" name="type"
+                class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">{{ __('All') }}</option>
+                @foreach ($types as $type)
+                    <option value="{{ $type->value }}" @selected(request('type') === $type->value)>
+                        {{ $type->label() }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
+        <div>
+            <x-input-label for="filter-category" :value="__('Category')" />
+            <select id="filter-category" name="category"
+                class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="">{{ __('All') }}</option>
+                @foreach ($categories as $category)
+                    <option value="{{ $category }}" @selected(request('category') === $category)>
+                        {{ $category }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
+        <div>
+            <x-input-label for="filter-group" :value="__('Layout')" />
+            <select id="filter-group" name="group"
+                class="mt-1 block rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <option value="1" @selected($grouped)>{{ __('Group by day') }}</option>
+                <option value="0" @selected(! $grouped)>{{ __('Flat list') }}</option>
+            </select>
+        </div>
+
+        {{-- Inside the form on purpose: the calendar writes the selection into
+             these inputs and submits the form, so they have to be fields of it. --}}
+        <div class="basis-full border-t border-gray-100 pt-4">
+            <p class="mb-2 text-sm font-medium text-gray-700" id="date-filter-label">{{ __('Dates') }}</p>
+            @include('transactions.partials.date-picker')
+        </div>
+
+        <noscript>
+            <x-primary-button>{{ __('Apply') }}</x-primary-button>
+        </noscript>
+
+        {{-- An anchor rather than a button so clearing filters still works when
+             JavaScript is unavailable. The layout choice is kept because it is
+             a view preference rather than a filter on the data. --}}
+        <a id="filter-reset" href="{{ route('transactions.index', ['group' => $grouped ? 1 : 0]) }}"
+            class="text-sm text-gray-600 hover:text-gray-900 {{ $activeFilters->isEmpty() ? 'hidden' : '' }}">
+            {{ __('Reset') }}
+        </a>
+    </form>
+</details>
+
+@if ($day ?? null)
+    <div class="bg-indigo-50 border border-indigo-200 text-indigo-800 text-sm rounded-lg px-4 py-3">
+        {{ __('Showing one day: :date.', ['date' => $day]) }}
+    </div>
+@elseif (($from ?? null) || ($to ?? null))
+    <div class="bg-indigo-50 border border-indigo-200 text-indigo-800 text-sm rounded-lg px-4 py-3">
+        {{ __('Showing from :from to :to', ['from' => $from ?? __('any date'), 'to' => $to ?? __('today')]) }}
+    </div>
+@endif
 
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                @if ($transactions->isEmpty())
+                @if ($grouped)
+                    @if ($groups->isEmpty())
+                        <p class="p-6 text-gray-500">{{ __('No transactions yet.') }}</p>
+                    @else
+                        <div class="divide-y divide-gray-100">
+                            @foreach ($groups as $group)
+                                {{-- A day with a single transaction is shown open: there is
+                                     nothing to hide behind a disclosure. --}}
+                                @if ($group['count'] === 1)
+                                    <div class="px-6 py-4">
+                                        <div class="flex items-baseline justify-between gap-4">
+                                            <p class="text-sm font-medium text-gray-900">{{ $group['label'] }}</p>
+                                            <p class="text-sm text-gray-500">
+                                                @include('transactions.partials.row', ['transaction' => $group['transactions'][0]])
+                                            </p>
+                                        </div>
+                                    </div>
+                                @else
+                                    <details class="group/day">
+                                        <summary class="flex cursor-pointer list-none items-baseline justify-between gap-4 px-6 py-4 hover:bg-gray-50">
+                                            <span class="flex items-baseline gap-3">
+                                                <span class="text-sm font-medium text-gray-900">{{ $group['label'] }}</span>
+                                                <span class="text-xs text-gray-500">
+                                                    {{ trans_choice(':count transaction|:count transactions', $group['count'], ['count' => $group['count']]) }}
+                                                </span>
+                                            </span>
+                                            <span class="flex items-baseline gap-4 text-sm">
+                                                @if ($group['income'] > 0)
+                                                    <span class="text-emerald-600">
+                                                        +{{ number_format($group['income'], 2) }}
+                                                    </span>
+                                                @endif
+                                                @if ($group['expenses'] > 0)
+                                                    <span class="text-gray-700">
+                                                        −{{ number_format($group['expenses'], 2) }}
+                                                    </span>
+                                                @endif
+                                            </span>
+                                        </summary>
+
+                                        <div class="border-t border-gray-100">
+                                            @foreach ($group['transactions'] as $transaction)
+                                                @include('transactions.partials.row', ['transaction' => $transaction])
+                                            @endforeach
+                                        </div>
+                                    </details>
+                                @endif
+                            @endforeach
+                        </div>
+
+                        <div class="border-t border-gray-100 px-6 py-4">
+                            {{ $days->links() }}
+                        </div>
+                    @endif
+                @elseif ($transactions->isEmpty())
                     <p class="p-6 text-gray-500">{{ __('No transactions yet.') }}</p>
                 @else
                     <table class="min-w-full divide-y divide-gray-200">
@@ -149,4 +274,17 @@
             </div>
         </div>
     </div>
+
+    @push('scripts')
+        <script>
+            // Filters apply as soon as they change, so there is no Apply button.
+            // Without JavaScript the noscript button inside the form covers it.
+            const filterForm = document.getElementById('transaction-filters');
+
+            // A single day overrides the range, so both can stay filled in:
+            // the server gives the day precedence and the notice under the
+            // panel states which one is in effect.
+            filterForm.addEventListener('change', () => filterForm.submit());
+        </script>
+    @endpush
 </x-app-layout>

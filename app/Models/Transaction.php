@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['amount', 'type', 'currency', 'occurred_at', 'category', 'note', 'base_amount', 'base_currency', 'applied_rate'])]
+#[Fillable(['amount', 'type', 'currency', 'occurred_at', 'category', 'note', 'base_amount', 'base_currency', 'applied_rate', 'import_id'])]
 class Transaction extends Model
 {
     /** @use HasFactory<TransactionFactory> */
@@ -42,5 +42,13 @@ class Transaction extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the import that produced this transaction, when it came from one.
+     */
+    public function import(): BelongsTo
+    {
+        return $this->belongsTo(TransactionImport::class, 'import_id');
     }
 }

@@ -63,9 +63,15 @@ return [
     | will be used by the PHP date and date-time functions. The timezone
     | is set to "UTC" by default as it is suitable for most use cases.
     |
+    | This one matters more than it looks. Transaction timestamps are stored
+    | exactly as they are entered, so the timezone only affects how "now" and
+    | therefore day boundaries are calculated. With UTC while entering local
+    | times, an entry made in the afternoon sorts as a future timestamp and
+    | is excluded from the current day's totals.
+    |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------

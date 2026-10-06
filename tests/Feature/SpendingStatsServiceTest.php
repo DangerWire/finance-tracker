@@ -143,6 +143,97 @@ class SpendingStatsServiceTest extends TestCase
         $this->assertSame(100.0, $stats['current_period']['expenses']);
     }
 
+    public function test_it_excludes_transactions_converted_into_a_retired_base_currency(): void
+    {
+        config(['finance.base_currency' => 'CNY']);
+
+        $user = User::factory()->create();
+
+        $this->expense($user, 100, 'food', '2026-10-03');
+
+        // A row converted while IDR was the base currency still has a base
+        // amount, so a null check alone would let it into a CNY total.
+        $stale = Transaction::factory()->for($user)->create([
+            'type' => TransactionType::Expense,
+            'amount' => 50,
+            'currency' => 'IDR',
+            'base_amount' => 133750,
+            'base_currency' => 'IDR',
+            'applied_rate' => 2675,
+            'category' => 'food',
+            'occurred_at' => '2026-10-04 10:00:00',
+        ]);
+
+        $stats = app(SpendingStatsService::class)->forUser($user->id, CarbonImmutable::parse('2026-10-15'));
+
+        $this->assertSame(100.0, $stats['current_period']['expenses']);
+        $this->assertCount(1, $stats['categories']);
+        $this->assertSame(1, $stats['transaction_count']);
+        $this->assertNotSame(133750.0, $stats['largest_expense']['amount']);
+    }
+
+    public function test_it_includes_a_transaction_recorded_later_today(): void
+    {
+        $user = User::factory()->create();
+
+        // The query runs at the start of the day, but the user records an
+        // expense at 20:00. Bounding the period at "now" would drop it, which
+        // is what silently hid categories recorded in the evening.
+        $this->expense($user, 100, 'utang', '2026-10-06');
+
+        $stats = app(SpendingStatsService::class)->forUser(
+            $user->id,
+            CarbonImmutable::parse('2026-10-06 00:00:00'),
+        );
+
+        $categories = collect($stats['categories'])->keyBy('category');
+
+        $this->assertTrue($categories->has('utang'));
+        $this->assertSame(100.0, $categories['utang']['total']);
+        $this->assertSame(100.0, $stats['current_period']['expenses']);
+    }
+
+    public function test_category_totals_agree_with_the_headline_total(): void
+    {
+        $user = User::factory()->create();
+
+        $this->expense($user, 100, 'food', '2026-10-06');
+        $this->expense($user, 250, 'housing', '2026-10-06');
+        $this->expense($user, 25, 'transport', '2026-10-02');
+
+        $stats = app(SpendingStatsService::class)->forUser(
+            $user->id,
+            CarbonImmutable::parse('2026-10-06 09:00:00'),
+        );
+
+        // A breakdown that does not add up to the headline figure is the
+        // symptom of the two using different period boundaries.
+        $this->assertSame(
+            $stats['current_period']['expenses'],
+            round(array_sum(array_column($stats['categories'], 'total')), 2),
+        );
+    }
+
+    public function test_it_keeps_the_whole_final_day_of_the_previous_month(): void
+    {
+        $user = User::factory()->create();
+
+        // Recorded at midday on the last day of September.
+        $this->expense($user, 75, 'food', '2026-09-30');
+
+        // The category has to appear this month too, because the breakdown is
+        // built from the current month and carries the previous total on it.
+        $this->expense($user, 50, 'food', '2026-10-02');
+
+        $stats = app(SpendingStatsService::class)->forUser($user->id, CarbonImmutable::parse('2026-10-15'));
+
+        $food = collect($stats['categories'])->firstWhere('category', 'food');
+
+        // Bounding the previous month at subDay() would cut this off at
+        // midnight and report the month as 35 short.
+        $this->assertSame(75.0, $food['previous_total']);
+    }
+
     public function test_it_flags_a_partial_month(): void
     {
         $user = User::factory()->create();
@@ -181,14 +272,19 @@ class SpendingStatsServiceTest extends TestCase
         $this->assertNull($stats['largest_expense']);
     }
 
+    /**
+     * Records an expense already converted into the configured base currency.
+     */
     private function expense(User $user, float $amount, string $category, string $date): Transaction
     {
+        $baseCurrency = config('finance.base_currency');
+
         return Transaction::factory()->for($user)->create([
             'type' => TransactionType::Expense,
             'amount' => $amount,
-            'currency' => 'IDR',
+            'currency' => $baseCurrency,
             'base_amount' => $amount,
-            'base_currency' => 'IDR',
+            'base_currency' => $baseCurrency,
             'applied_rate' => 1,
             'category' => $category,
             'occurred_at' => $date.' 12:00:00',

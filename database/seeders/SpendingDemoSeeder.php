@@ -11,13 +11,21 @@ use Illuminate\Database\Seeder;
 /**
  * Generates realistic multi-month spending for the demo user.
  *
- * The figures are expressed in the base currency with a rate of 1, because
- * these rows stand in for local spending rather than converted amounts.
+ * The figures below are CNY amounts that stand in for local spending. They are
+ * stamped as CNY with a rate of 1 rather than labelled with whatever currency
+ * happens to be configured as the base, because the amounts themselves encode
+ * the currency: relabelling them would claim that a 2800 rent is 2800 IDR,
+ * which is a different number entirely and cannot be fixed by reconverting.
  */
 class SpendingDemoSeeder extends Seeder
 {
     /**
-     * Recurring monthly commitments in the base currency.
+     * The currency the figures in this seeder are actually denominated in.
+     */
+    private const CURRENCY = 'CNY';
+
+    /**
+     * Recurring monthly commitments in CNY.
      *
      * @var array<string, array{int|float, array<int, int>}>
      */
@@ -42,7 +50,7 @@ class SpendingDemoSeeder extends Seeder
     ];
 
     /**
-     * Recurring monthly income in the base currency.
+     * Recurring monthly income in CNY.
      *
      * @var array<int, array{0: int, 1: float, 2: string}>
      */
@@ -142,14 +150,20 @@ class SpendingDemoSeeder extends Seeder
     ): void {
         $occurredAt = $month->day(min($day, $month->daysInMonth))->setTime(12, 0);
 
+        $isBase = strtoupper((string) config('finance.base_currency')) === self::CURRENCY;
+
         Transaction::create([
             'user_id' => $user->id,
             'type' => $type,
             'amount' => $amount,
-            'currency' => config('finance.base_currency'),
-            'base_amount' => $amount,
-            'base_currency' => config('finance.base_currency'),
-            'applied_rate' => 1,
+            'currency' => self::CURRENCY,
+            // The base snapshot is only filled in when the demo currency is
+            // also the configured base currency. When it is not, the row is
+            // left unconverted on purpose so the backfill command can convert
+            // it from the original amount rather than from a fabricated rate.
+            'base_amount' => $isBase ? $amount : null,
+            'base_currency' => $isBase ? self::CURRENCY : null,
+            'applied_rate' => $isBase ? 1 : null,
             'occurred_at' => $occurredAt,
             'category' => $category,
             'note' => $note,

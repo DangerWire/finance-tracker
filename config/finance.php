@@ -10,10 +10,11 @@ return [
     | The currency that all totals are converted into and reported in. The
     | original amount on a transaction is always preserved, so changing this
     | value only affects transactions created from that point onward; existing
-    | rows keep the base currency they were converted into.
+    | rows keep the base currency they were converted into and are excluded
+    | from totals until they are reconverted with finance:backfill-base-amounts.
     |
     */
 
-    'base_currency' => env('FINANCE_BASE_CURRENCY', 'IDR'),
+    'base_currency' => env('FINANCE_BASE_CURRENCY', 'CNY'),
 
 ];

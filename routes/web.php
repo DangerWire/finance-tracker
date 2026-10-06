@@ -4,6 +4,7 @@ use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SpendingInsightController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\TransactionImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -19,11 +20,25 @@ Route::get('/dashboard', function () {
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
+    // Registered before the resource so that the literal /transactions/import
+    // paths are not captured by the /transactions/{transaction} wildcard.
+    Route::get('/transactions/import', [TransactionImportController::class, 'create'])
+        ->name('transaction-imports.create');
+    Route::get('/transactions/imports', [TransactionImportController::class, 'index'])
+        ->name('transaction-imports.index');
+    Route::post('/transactions/import/preview', [TransactionImportController::class, 'preview'])
+        ->name('transaction-imports.preview');
+    Route::post('/transactions/import/remap', [TransactionImportController::class, 'remap'])
+        ->name('transaction-imports.remap');
+    Route::post('/transactions/import', [TransactionImportController::class, 'store'])
+        ->name('transaction-imports.store');
+    Route::delete('/transactions/imports/{import}', [TransactionImportController::class, 'destroy'])
+        ->name('transaction-imports.destroy');
+
     Route::resource('transactions', TransactionController::class);
 
     Route::get('/insights', [SpendingInsightController::class, 'index'])->name('insights.index');
     Route::post('/insights/generate', [SpendingInsightController::class, 'generate'])->name('insights.generate');
-    Route::put('/insights/preference', [SpendingInsightController::class, 'updatePreference'])->name('insights.preference');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

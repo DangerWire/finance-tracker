@@ -7,16 +7,24 @@ use App\Models\Transaction;
 use Illuminate\Console\Command;
 
 /**
- * Populates the base currency snapshot for transactions that predate it.
+ * Populates the base currency snapshot for transactions that need one.
  *
- * Safe to re-run: transactions that already carry a base amount are skipped.
+ * Two kinds of row qualify: transactions that predate the snapshot, and
+ * transactions whose snapshot was taken into a base currency other than the
+ * one now configured. The second case is why this is not simply a check for a
+ * missing base amount: those rows carry a figure that is numerically present
+ * but denominated in the wrong currency, so totals silently blend two
+ * currencies until they are recomputed.
+ *
+ * Safe to re-run: transactions already converted into the current base
+ * currency are skipped.
  */
 class BackfillTransactionBaseAmounts extends Command
 {
     /**
      * @var string
      */
-    protected $signature = 'finance:backfill-base-amounts {--force : Convert even transactions that already have a base amount}';
+    protected $signature = 'finance:backfill-base-amounts {--force : Convert every transaction, including ones already in the current base currency}';
 
     /**
      * @var string
@@ -25,12 +33,17 @@ class BackfillTransactionBaseAmounts extends Command
 
     public function handle(ConvertTransactionAmount $convert): int
     {
-        $baseCurrency = config('finance.base_currency');
+        $baseCurrency = strtoupper((string) config('finance.base_currency'));
 
-        $query = Transaction::query()->whereNull('base_amount');
+        $query = Transaction::query();
 
-        if (! $this->option('force')) {
-            $query->whereNull('base_currency');
+        if ($this->option('force')) {
+            $query->whereRaw('1 = 1');
+        } else {
+            $query->where(function ($query) use ($baseCurrency): void {
+                $query->whereNull('base_amount')
+                    ->orWhere('base_currency', '!=', $baseCurrency);
+            });
         }
 
         $total = (clone $query)->count();
