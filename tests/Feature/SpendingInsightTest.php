@@ -131,14 +131,15 @@ class SpendingInsightTest extends TestCase
     private function userWithSpending(int $count): User
     {
         $user = User::factory()->create();
+        $baseCurrency = config('finance.base_currency');
 
         foreach (range(1, $count) as $index) {
             Transaction::factory()->for($user)->create([
                 'type' => TransactionType::Expense,
                 'amount' => 50 + $index,
-                'currency' => 'IDR',
+                'currency' => $baseCurrency,
                 'base_amount' => 50 + $index,
-                'base_currency' => 'IDR',
+                'base_currency' => $baseCurrency,
                 'applied_rate' => 1,
                 'category' => 'food',
                 'occurred_at' => now()->startOfMonth()->addDays($index)->setTime(12, 0),

@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Services\SpendingInsightService;
 use App\Services\SpendingStatsService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
 use Throwable;
 
 class SpendingInsightController extends Controller
@@ -19,9 +19,7 @@ class SpendingInsightController extends Controller
      */
     public function index(Request $request, SpendingStatsService $stats): View
     {
-        $convert = (bool) $request->user()->prefers_base_currency;
-
-        $payload = $stats->forUser($request->user()->id, inBaseCurrency: $convert);
+        $payload = $stats->forUser($request->user()->id);
 
         return view('insights.index', [
             'stats' => $payload,
@@ -29,27 +27,8 @@ class SpendingInsightController extends Controller
             'headline' => null,
             'isConfigured' => app(SpendingInsightService::class)->isConfigured(),
             'hasEnoughData' => $this->hasEnoughData($payload),
-            'convert' => $convert,
             'error' => null,
         ]);
-    }
-
-    /**
-     * Toggle whether figures are converted into the base currency.
-     */
-    public function updatePreference(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'prefers_base_currency' => ['required', 'boolean'],
-        ]);
-
-        $request->user()->update([
-            'prefers_base_currency' => $validated['prefers_base_currency'],
-        ]);
-
-        return redirect()
-            ->route('insights.index')
-            ->with('status', __('Preference saved.'));
     }
 
     /**
@@ -60,9 +39,7 @@ class SpendingInsightController extends Controller
         SpendingStatsService $stats,
         SpendingInsightService $insights,
     ): RedirectResponse|View {
-        $convert = (bool) $request->user()->prefers_base_currency;
-
-        $payload = $stats->forUser($request->user()->id, inBaseCurrency: $convert);
+        $payload = $stats->forUser($request->user()->id);
 
         if (! $this->hasEnoughData($payload)) {
             return back()->withErrors([
@@ -91,7 +68,6 @@ class SpendingInsightController extends Controller
             'headline' => $result['headline'],
             'isConfigured' => true,
             'hasEnoughData' => true,
-            'convert' => $convert,
             'error' => null,
         ]);
     }

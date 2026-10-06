@@ -41,4 +41,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(Transaction::class);
     }
+
+    /**
+     * Get the CSV imports this user has run.
+     *
+     * @return HasMany<TransactionImport, $this>
+     */
+    public function imports(): HasMany
+    {
+        return $this->hasMany(TransactionImport::class);
+    }
 }
