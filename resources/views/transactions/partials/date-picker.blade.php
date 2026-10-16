@@ -6,138 +6,32 @@
      * first two into a range. Clicking again starts over from the new date, so
      * no separate "clear" gesture is needed.
      *
-     * Month and year navigation are plain links that carry the other filters
-     * but drop the date selection: navigating is browsing, and keeping the old
-     * selection would filter by dates the user can no longer see.
+     * The grid is rendered separately because a month fetched over the network
+     * replaces it wholesale. Everything the browser must keep — the date inputs
+     * that drive the form, and the clear button — deliberately sits OUTSIDE the
+     * element that gets swapped.
      *
      * @var \Carbon\CarbonImmutable $calendarMonth
      * @var \Illuminate\Support\Collection<string, int> $activityByDay
      */
-    $monthStart = $calendarMonth->copy()->startOfMonth();
-    $monthEnd = $monthStart->copy()->endOfMonth();
-    $today = \Carbon\CarbonImmutable::now()->format('Y-m-d');
-
-    $browseQuery = fn (string $month): string => route('transactions.index', [
-        ...request()->except(['page', 'month', 'date', 'from', 'to']),
-        // Keeps the filter panel open across month navigation.
-        'panel' => 1,
-        'month' => $month,
-    ]);
-
-    $previousMonth = $browseQuery($monthStart->copy()->subMonthNoOverflow()->format('Y-m'));
-    $nextMonth = $browseQuery($monthStart->copy()->addMonthNoOverflow()->format('Y-m'));
-    $previousYear = $browseQuery($monthStart->copy()->subYearNoOverflow()->format('Y-m'));
-    $nextYear = $browseQuery($monthStart->copy()->addYearNoOverflow()->format('Y-m'));
-
-    // The month dropdown is a jump control rather than a form field, so it
-    // cannot drag the current date selection along with it.
-    $months = [];
-    for ($offset = -24; $offset <= 24; $offset++) {
-        $candidate = $monthStart->copy()->addMonthsNoOverflow($offset);
-        $months[] = [
-            'url' => $browseQuery($candidate->format('Y-m')),
-            'label' => $candidate->isoFormat('MMM YYYY'),
-            'current' => $candidate->format('Y-m') === $monthStart->format('Y-m'),
-        ];
-    }
-
-    // The selection is normalised into a range, so rendering only has to
-    // consider two bounds whether the user picked a day or a span.
-    $start = $day ?? $from ?? null;
-    $end = $to ?? $day ?? null;
-
-    $weekdayLabels = [];
-    for ($offset = 0; $offset < 7; $offset++) {
-        $weekdayLabels[] = $monthStart->copy()->startOfWeek(\Carbon\CarbonImmutable::MONDAY)
-            ->addDays($offset)->isoFormat('ddd');
-    }
+    $hasSelection = (bool) ($day ?? $from ?? $to);
 @endphp
 
-<div class="date-picker w-72 max-w-full select-none rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
-    data-month="{{ $monthStart->format('Y-m') }}" aria-labelledby="date-filter-label">
+<div class="w-72 max-w-full select-none rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+    aria-labelledby="date-filter-label">
 
-    <div class="flex items-center justify-between gap-1">
-        <a href="{{ $previousYear }}" rel="prev-year" title="{{ __('Previous year') }}"
-            class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">&laquo;</a>
-        <a href="{{ $previousMonth }}" rel="prev" title="{{ __('Previous month') }}"
-            class="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700">&lsaquo;</a>
-
-        {{-- Fixed width on purpose: a native select sizes itself to its longest
-             option, which would otherwise stretch the card far past the
-             seven-column grid below. --}}
-        <select aria-label="{{ __('Month') }}"
-            class="w-24 cursor-pointer truncate border-0 bg-transparent p-0 text-center text-sm font-semibold text-gray-800 focus:ring-0"
-            onchange="if (this.value) { window.location.href = this.value; }">
-            @foreach ($months as $month)
-                <option value="{{ $month['url'] }}" @selected($month['current'])>{{ $month['label'] }}</option>
-            @endforeach
-        </select>
-
-        <a href="{{ $nextMonth }}" rel="next" title="{{ __('Next month') }}"
-            class="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700">&rsaquo;</a>
-        <a href="{{ $nextYear }}" rel="next-year" title="{{ __('Next year') }}"
-            class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">&raquo;</a>
-    </div>
-
-    <div class="mt-2 grid grid-cols-7 text-center text-[11px] font-medium uppercase tracking-wide text-gray-400">
-        @foreach ($weekdayLabels as $label)
-            <span>{{ $label }}</span>
-        @endforeach
-    </div>
-
-    <div class="mt-1 grid grid-cols-7 gap-0.5">
-        @for ($blank = $monthStart->dayOfWeekIso - 1; $blank > 0; $blank--)
-            <span aria-hidden="true" class="h-8"></span>
-        @endfor
-
-        @for ($number = 1; $number <= $monthEnd->day; $number++)
-            @php
-                $date = $monthStart->copy()->day($number)->format('Y-m-d');
-                $isEdge = $date === $start || $date === $end;
-                $inside = $start !== null && $end !== null && $date > $start && $date < $end;
-            @endphp
-
-            <button type="button" data-date="{{ $date }}" title="{{ $date }}"
-                @class([
-                    'relative flex h-8 items-center justify-center rounded text-sm transition',
-                    'bg-indigo-600 font-semibold text-white' => $isEdge,
-                    'bg-indigo-100 text-indigo-900' => $inside,
-                    'text-gray-700 hover:bg-gray-200' => ! $isEdge && ! $inside,
-                    'ring-1 ring-inset ring-gray-400' => $date === $today && ! $isEdge,
-                ])
-                aria-pressed="{{ $isEdge ? 'true' : 'false' }}">
-                <span>{{ $number }}</span>
-
-                {{-- A mark on days that actually hold transactions, so the
-                     calendar doubles as a density map of the month. --}}
-                @if (($activityByDay[$date] ?? 0) > 0)
-                    <span @class([
-                        'absolute bottom-0.5 h-1 w-1 rounded-full',
-                        'bg-white' => $isEdge,
-                        'bg-indigo-500' => ! $isEdge,
-                    ])></span>
-                @endif
-            </button>
-        @endfor
+    <div class="date-picker" data-month="{{ $calendarMonth->format('Y-m') }}">
+        @include('transactions.partials.date-picker-grid')
     </div>
 
     {{-- Real inputs belonging to the filter form, so the picker keeps working
-         without JavaScript and the selection reaches the server. --}}
+         without JavaScript and the selection reaches the server. Outside the
+         picker on purpose: a month swap must not destroy them. --}}
     <input type="hidden" name="date" value="{{ $day }}">
     <input type="hidden" name="from" value="{{ $from }}">
     <input type="hidden" name="to" value="{{ $to }}">
 
-    <p class="mt-2 text-xs text-gray-500">
-        @if ($start && $end && $start !== $end)
-            {{ __('Click another date to start over.') }}
-        @elseif ($start)
-            {{ __('Click a second date for a range.') }}
-        @else
-            {{ __('Click a day, then a second day for a range.') }}
-        @endif
-    </p>
-
-    @if ($start || $end)
+    @if ($hasSelection)
         <button type="button" id="date-clear" class="mt-1 text-xs text-gray-600 hover:text-gray-900">
             {{ __('Clear dates') }}
         </button>
@@ -146,11 +40,17 @@
 
 @push('scripts')
     <script>
+        // Located by the surrounding card, since the picker element itself is
+        // replaced on every month swap.
         document.querySelectorAll('.date-picker').forEach((picker) => {
+            const card = picker.parentElement;
             const form = document.getElementById('transaction-filters');
             const dateInput = form.querySelector('input[name="date"]');
             const fromInput = form.querySelector('input[name="from"]');
             const toInput = form.querySelector('input[name="to"]');
+
+            // Where a month fetch is served from.
+            const calendarPath = @json(route('transactions.calendar'));
 
             // The day picked most recently. A second click pairs with it to
             // make a range; a third click discards it and starts again.
@@ -170,8 +70,67 @@
                 });
             };
 
-            picker.querySelectorAll('[data-date]').forEach((cell) => {
-                cell.addEventListener('click', () => {
+            // Show or hide the clear button to match the live selection.
+            const syncClear = () => {
+                const button = card.querySelector('#date-clear');
+
+                if (!button) {
+                    return;
+                }
+
+                const active = Boolean(dateInput.value || fromInput.value || toInput.value);
+                button.hidden = !active;
+            };
+
+            // Fetch a month and swap the grid in place.
+            //
+            // This only ever changes which month the calendar draws: the month
+            // is not a filter, so the list beneath it is unaffected and there is
+            // nothing to reload. Previously every arrow press re-rendered the
+            // whole page for an identical result.
+            const swapMonth = async (href) => {
+                const url = new URL(href, location.origin);
+                url.pathname = calendarPath;
+
+                try {
+                    const response = await fetch(url, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    });
+
+                    const body = await response.text();
+
+                    // A page instead of a fragment means the endpoint did not
+                    // match. Swapping that in would destroy the picker, so fall
+                    // back to navigating rather than rendering it.
+                    if (!response.ok || body.includes('<html')) {
+                        console.warn(
+                            '[calendar] fragment fetch returned a page; navigating instead',
+                            { url: String(url), status: response.status },
+                        );
+                        location.href = href;
+                        return;
+                    }
+
+                    // Only the grid is replaced. The date inputs are outside it
+                    // and keep their values, so an active filter survives a
+                    // change of month.
+                    picker.innerHTML = body;
+                    picker.dataset.month = url.searchParams.get('month') ?? picker.dataset.month;
+
+                    syncClear();
+                } catch (error) {
+                    console.warn('[calendar] fragment fetch failed', { url: String(url), error });
+                    location.href = href;
+                }
+            };
+
+            // Delegated rather than bound per cell, because the cells are
+            // replaced wholesale by a month fetch and any directly attached
+            // handler would go with them.
+            picker.addEventListener('click', (event) => {
+                const cell = event.target.closest('[data-date]');
+
+                if (cell) {
                     const value = cell.dataset.date;
 
                     if (!anchor) {
@@ -202,17 +161,43 @@
                         paint(start, end);
                     }
 
+                    syncClear();
                     form.submit();
-                });
+                    return;
+                }
+
+                const nav = event.target.closest('[data-calendar-nav]');
+
+                if (nav) {
+                    event.preventDefault();
+                    swapMonth(nav.href);
+                }
             });
 
-            document.getElementById('date-clear')?.addEventListener('click', () => {
+            card.addEventListener('click', (event) => {
+                if (!event.target.closest('#date-clear')) {
+                    return;
+                }
+
                 dateInput.value = '';
                 fromInput.value = '';
                 toInput.value = '';
                 anchor = '';
                 paint(null, null);
+                syncClear();
                 form.submit();
+            });
+
+            picker.addEventListener('change', (event) => {
+                const select = event.target.closest('[data-calendar-month-select]');
+
+                if (select) {
+                    // Handled here rather than by the form's own change
+                    // listener, so it navigates the calendar instead of
+                    // submitting and reloading the page.
+                    event.stopPropagation();
+                    swapMonth(select.value);
+                }
             });
         });
     </script>

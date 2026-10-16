@@ -8,8 +8,9 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['amount', 'type', 'currency', 'occurred_at', 'category', 'note', 'base_amount', 'base_currency', 'applied_rate', 'import_id'])]
+#[Fillable(['amount', 'type', 'currency', 'occurred_at', 'category', 'note', 'base_amount', 'base_currency', 'applied_rate', 'import_id', 'recurring_transaction_id', 'occurrence_on'])]
 class Transaction extends Model
 {
     /** @use HasFactory<TransactionFactory> */
@@ -24,6 +25,7 @@ class Transaction extends Model
     {
         return [
             'occurred_at' => 'datetime',
+            'occurrence_on' => 'date',
             'type' => TransactionType::class,
         ];
     }
@@ -50,5 +52,33 @@ class Transaction extends Model
     public function import(): BelongsTo
     {
         return $this->belongsTo(TransactionImport::class, 'import_id');
+    }
+
+    /**
+     * Get the recurring template that produced this transaction.
+     */
+    public function recurringTransaction(): BelongsTo
+    {
+        return $this->belongsTo(RecurringTransaction::class);
+    }
+
+    /**
+     * Get the individual category splits for this transaction.
+     *
+     * @return HasMany<TransactionSplit, $this>
+     */
+    public function splits(): HasMany
+    {
+        return $this->hasMany(TransactionSplit::class);
+    }
+
+    /**
+     * Whether this transaction is split across multiple categories.
+     */
+    public function isSplit(): bool
+    {
+        return $this->relationLoaded('splits')
+            ? $this->splits->isNotEmpty()
+            : $this->splits()->exists();
     }
 }

@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
@@ -57,7 +58,7 @@ class TransactionController extends Controller
 
             $groups = $this->groupsFor($request->user(), $filters, $from, $to, $days->pluck('day')->all());
         } else {
-            $transactions = $this->applyFilters($request->user()->transactions()->getQuery(), $filters, $from, $to)
+            $transactions = $this->applyFilters($request->user()->transactions()->with('splits')->getQuery(), $filters, $from, $to)
                 ->latest('occurred_at')
                 ->paginate(15)
                 ->withQueryString();
@@ -110,6 +111,38 @@ class TransactionController extends Controller
     }
 
     /**
+     * Render just the calendar for a month.
+     *
+     * Month navigation only changes which month the calendar draws, never the
+     * list beneath it, so serving this fragment avoids re-rendering a page whose
+     * content would be identical. Without JavaScript the arrows still work,
+     * because they are ordinary links whose full-page response includes the
+     * same partial.
+     */
+    public function calendar(Request $request): Response
+    {
+        // Deliberately not validated. This endpoint exists only to serve the
+        // grid to a browser that already holds the current filters; a rejection
+        // here would surface to the user as a full page reload, which is the
+        // exact behaviour this endpoint exists to avoid. Unknown values are
+        // simply ignored, and calendarMonth falls back to the current month.
+        $filters = $request->only(['type', 'category', 'month', 'group']);
+
+        $month = $this->calendarMonth($filters);
+
+        return response()->view('transactions.partials.date-picker-grid', [
+            'calendarMonth' => $month,
+            'activityByDay' => $this->activityByDay($request, $filters, $month),
+            // Not carried through, because month navigation is browsing rather
+            // than filtering. The date inputs live outside the grid precisely
+            // so the live selection survives the swap.
+            'day' => null,
+            'from' => null,
+            'to' => null,
+        ])->header('X-Calendar-Fragment', '1');
+    }
+
+    /**
      * Show the form for creating a new transaction.
      */
     public function create(Request $request, CategoryService $categories): View
@@ -126,9 +159,21 @@ class TransactionController extends Controller
      */
     public function store(StoreTransactionRequest $request, ConvertTransactionAmount $convert): RedirectResponse
     {
-        $attributes = $convert->apply($request->validated());
+        $validated = $request->validated();
+        $splits = $validated['splits'] ?? null;
+        unset($validated['splits']);
 
-        $request->user()->transactions()->create($attributes);
+        if (! empty($splits) && empty($validated['category'])) {
+            $validated['category'] = 'Split';
+        }
+
+        $attributes = $convert->apply($validated);
+
+        $transaction = $request->user()->transactions()->create($attributes);
+
+        if (! empty($splits)) {
+            $this->syncSplits($transaction, $splits);
+        }
 
         return redirect()
             ->route('transactions.index')
@@ -142,6 +187,8 @@ class TransactionController extends Controller
     {
         $this->authorizeOwnership($request, $transaction);
 
+        $transaction->load('splits');
+
         return view('transactions.show', [
             'transaction' => $transaction,
         ]);
@@ -153,6 +200,8 @@ class TransactionController extends Controller
     public function edit(Request $request, Transaction $transaction, CategoryService $categories): View
     {
         $this->authorizeOwnership($request, $transaction);
+
+        $transaction->load('splits');
 
         return view('transactions.edit', [
             'transaction' => $transaction,
@@ -168,11 +217,26 @@ class TransactionController extends Controller
     {
         $this->authorizeOwnership($request, $transaction);
 
+        $validated = $request->validated();
+        $splits = $validated['splits'] ?? null;
+        unset($validated['splits']);
+
+        if (! empty($splits) && empty($validated['category'])) {
+            $validated['category'] = 'Split';
+        }
+
         // Re-derive the base snapshot so an edited amount, currency, or date
         // cannot leave the converted total stale.
-        $transaction->fill($convert->apply($request->validated()));
+        $transaction->fill($convert->apply($validated));
 
         $transaction->save();
+
+        if ($splits !== null) {
+            $transaction->splits()->delete();
+            if (! empty($splits)) {
+                $this->syncSplits($transaction, $splits);
+            }
+        }
 
         return redirect()
             ->route('transactions.index')
@@ -229,16 +293,43 @@ class TransactionController extends Controller
     private function calendarMonth(array $filters): CarbonImmutable
     {
         if (! empty($filters['month'])) {
-            return CarbonImmutable::createFromFormat('Y-m', $filters['month'])->startOfMonth();
+            $month = $this->parseDate($filters['month'], 'Y-m');
+
+            if ($month !== null) {
+                return $month->startOfMonth();
+            }
         }
 
         foreach (['date', 'from', 'to'] as $key) {
             if (! empty($filters[$key])) {
-                return CarbonImmutable::createFromFormat('Y-m-d', $filters[$key])->startOfMonth();
+                $date = $this->parseDate($filters[$key], 'Y-m-d');
+
+                if ($date !== null) {
+                    return $date->startOfMonth();
+                }
             }
         }
 
         return CarbonImmutable::now()->startOfMonth();
+    }
+
+    /**
+     * Parse a date, or return null rather than blowing up.
+     *
+     * Carbon returns false on a failed createFromFormat, so calling a method on
+     * the result is a fatal error rather than an exception. These values come
+     * straight from the query string, and this method also serves the calendar
+     * fragment endpoint, where a malformed month should not take down the page.
+     */
+    private function parseDate(string $value, string $format): ?CarbonImmutable
+    {
+        try {
+            $parsed = CarbonImmutable::createFromFormat($format, $value);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $parsed === false ? null : $parsed;
     }
 
     /**
@@ -300,7 +391,7 @@ class TransactionController extends Controller
             return collect();
         }
 
-        $transactions = $this->applyFilters($user->transactions()->getQuery(), $filters, $from, $to)
+        $transactions = $this->applyFilters($user->transactions()->with('splits')->getQuery(), $filters, $from, $to)
             ->where(function (Builder $query) use ($dates): void {
                 foreach ($dates as $date) {
                     $start = CarbonImmutable::createFromFormat('Y-m-d', $date)->startOfDay();
@@ -327,6 +418,44 @@ class TransactionController extends Controller
                     'transactions' => $day->values(),
                 ];
             });
+    }
+
+    /**
+     * Synchronize split lines for the transaction.
+     *
+     * @param  array<int, array{category: string, amount: numeric, note?: ?string}>  $splits
+     */
+    private function syncSplits(Transaction $transaction, array $splits): void
+    {
+        $count = count($splits);
+        if ($count === 0) {
+            return;
+        }
+
+        $allocatedBase = 0.0;
+        $records = [];
+        $rate = (float) ($transaction->applied_rate ?? 1.0);
+
+        foreach (array_values($splits) as $index => $split) {
+            $splitAmount = round((float) $split['amount'], 2);
+
+            // Allocate remaining base_amount to the final split line to prevent rounding drift
+            if ($index === $count - 1) {
+                $baseAmount = round($transaction->base_amount - $allocatedBase, 2);
+            } else {
+                $baseAmount = round($splitAmount * $rate, 2);
+                $allocatedBase += $baseAmount;
+            }
+
+            $records[] = [
+                'category' => trim((string) $split['category']),
+                'amount' => $splitAmount,
+                'base_amount' => $baseAmount,
+                'note' => isset($split['note']) && trim((string) $split['note']) !== '' ? trim((string) $split['note']) : null,
+            ];
+        }
+
+        $transaction->splits()->createMany($records);
     }
 
     /**

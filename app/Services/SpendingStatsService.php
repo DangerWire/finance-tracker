@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\TransactionType;
+use App\Models\Budget;
 use App\Models\Transaction;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -88,6 +89,7 @@ class SpendingStatsService
             'categories' => $this->categoryBreakdown($userId, $through),
             'largest_expense' => $this->largestExpense($userId, $through),
             'transaction_count' => $this->transactionCount($userId, $through),
+            'budgets' => $this->budgetOverview($userId, $through),
         ];
     }
 
@@ -181,21 +183,44 @@ class SpendingStatsService
      */
     private function categoryTotalsBetween(int $userId, CarbonImmutable $from, CarbonImmutable $to): array
     {
-        return $this->expenseQuery($userId)
+        $transactions = $this->expenseQuery($userId)
+            ->with('splits')
             ->whereBetween('occurred_at', [$from, $to])
-            ->get(['category', 'base_amount', 'base_currency'])
-            ->filter(fn (Transaction $transaction): bool => $transaction->category !== null)
-            ->groupBy(fn (Transaction $transaction): string => $transaction->category.'|'.$transaction->base_currency)
-            ->map(function (Collection $group, string $key): array {
-                [$category, $currency] = explode('|', $key, 2);
+            ->get();
 
-                return [
-                    'category' => $category,
-                    'currency' => $currency,
-                    'total' => (float) $group->sum('base_amount'),
-                ];
-            })
-            ->all();
+        $totals = [];
+
+        foreach ($transactions as $transaction) {
+            $currency = $transaction->base_currency;
+
+            if ($transaction->splits->isNotEmpty()) {
+                foreach ($transaction->splits as $split) {
+                    if ($split->category !== null && $split->category !== '') {
+                        $key = $split->category.'|'.$currency;
+                        if (! isset($totals[$key])) {
+                            $totals[$key] = [
+                                'category' => $split->category,
+                                'currency' => $currency,
+                                'total' => 0.0,
+                            ];
+                        }
+                        $totals[$key]['total'] += (float) $split->base_amount;
+                    }
+                }
+            } elseif ($transaction->category !== null && $transaction->category !== '') {
+                $key = $transaction->category.'|'.$currency;
+                if (! isset($totals[$key])) {
+                    $totals[$key] = [
+                        'category' => $transaction->category,
+                        'currency' => $currency,
+                        'total' => 0.0,
+                    ];
+                }
+                $totals[$key]['total'] += (float) $transaction->base_amount;
+            }
+        }
+
+        return $totals;
     }
 
     /**
@@ -210,21 +235,40 @@ class SpendingStatsService
         // suppress the very spikes the check is meant to catch.
         $start = $through->subMonthsNoOverflow(self::PERIODS)->startOfMonth();
 
-        return $this->expenseQuery($userId)
+        $transactions = $this->expenseQuery($userId)
+            ->with('splits')
             // endOfDay keeps the final day of the baseline window, which a
             // bare subDay() would cut off at midnight.
             ->whereBetween('occurred_at', [$start, $through->startOfMonth()->subDay()->endOfDay()])
-            ->get(['category', 'base_amount', 'base_currency', 'occurred_at'])
-            ->filter(fn (Transaction $transaction): bool => $transaction->category !== null)
-            ->groupBy(fn (Transaction $transaction): string => $transaction->category.'|'.$transaction->base_currency)
-            ->map(fn (Collection $group): array => [
-                'averages' => $group
-                    ->groupBy(fn (Transaction $transaction): string => $transaction->occurred_at->format('Y-m'))
-                    ->map(fn (Collection $month): float => (float) $month->sum('base_amount'))
-                    ->values()
-                    ->all(),
-            ])
-            ->all();
+            ->get();
+
+        $rows = [];
+
+        foreach ($transactions as $transaction) {
+            $month = $transaction->occurred_at->format('Y-m');
+            $currency = $transaction->base_currency;
+
+            if ($transaction->splits->isNotEmpty()) {
+                foreach ($transaction->splits as $split) {
+                    if ($split->category !== null && $split->category !== '') {
+                        $key = $split->category.'|'.$currency;
+                        $rows[$key][$month] = ($rows[$key][$month] ?? 0.0) + (float) $split->base_amount;
+                    }
+                }
+            } elseif ($transaction->category !== null && $transaction->category !== '') {
+                $key = $transaction->category.'|'.$currency;
+                $rows[$key][$month] = ($rows[$key][$month] ?? 0.0) + (float) $transaction->base_amount;
+            }
+        }
+
+        $result = [];
+        foreach ($rows as $key => $months) {
+            $result[$key] = [
+                'averages' => array_values($months),
+            ];
+        }
+
+        return $result;
     }
 
     /**
@@ -292,5 +336,111 @@ class SpendingStatsService
         }
 
         return round((($current - $previous) / $previous) * 100, 1);
+    }
+
+    /**
+     * Compute budget vs actual spending for a user in a given month.
+     *
+     * @return array{
+     *     month: string,
+     *     currency: string,
+     *     total_budget: float,
+     *     total_spent: float,
+     *     total_remaining: float,
+     *     percentage_used: float,
+     *     status: 'safe'|'warning'|'exceeded',
+     *     items: array<int, array{
+     *         id: int,
+     *         category: string,
+     *         budget_amount: float,
+     *         spent_amount: float,
+     *         remaining_amount: float,
+     *         percentage_used: float,
+     *         status: 'safe'|'warning'|'exceeded'
+     *     }>
+     * }
+     */
+    public function budgetOverview(int $userId, ?CarbonImmutable $through = null): array
+    {
+        $through ??= CarbonImmutable::now();
+        $periodMonth = $through->format('Y-m');
+        $baseCurrency = strtoupper((string) config('finance.base_currency'));
+
+        $monthStart = $through->startOfMonth();
+        $monthEnd = $through->endOfMonth();
+
+        $budgets = Budget::query()
+            ->where('user_id', $userId)
+            ->where('period_month', $periodMonth)
+            ->orderBy('category')
+            ->get();
+
+        $transactions = $this->expenseQuery($userId)
+            ->with('splits')
+            ->whereBetween('occurred_at', [$monthStart, $monthEnd])
+            ->get();
+
+        $actuals = [];
+
+        foreach ($transactions as $transaction) {
+            if ($transaction->splits->isNotEmpty()) {
+                foreach ($transaction->splits as $split) {
+                    if ($split->category !== null && $split->category !== '') {
+                        $actuals[$split->category] = ($actuals[$split->category] ?? 0.0) + (float) $split->base_amount;
+                    }
+                }
+            } elseif ($transaction->category !== null && $transaction->category !== '') {
+                $actuals[$transaction->category] = ($actuals[$transaction->category] ?? 0.0) + (float) $transaction->base_amount;
+            }
+        }
+
+        $items = [];
+        $totalBudget = 0.0;
+        $totalSpent = 0.0;
+
+        foreach ($budgets as $budget) {
+            $budgetAmount = round((float) $budget->amount, 2);
+            $spent = round((float) ($actuals[$budget->category] ?? 0.0), 2);
+            $remaining = round($budgetAmount - $spent, 2);
+            $pct = $budgetAmount > 0.0 ? round(($spent / $budgetAmount) * 100, 1) : 0.0;
+
+            $status = match (true) {
+                $spent >= $budgetAmount => 'exceeded',
+                $pct >= 75.0 => 'warning',
+                default => 'safe',
+            };
+
+            $totalBudget += $budgetAmount;
+            $totalSpent += $spent;
+
+            $items[] = [
+                'id' => $budget->id,
+                'category' => $budget->category,
+                'budget_amount' => $budgetAmount,
+                'spent_amount' => $spent,
+                'remaining_amount' => $remaining,
+                'percentage_used' => $pct,
+                'status' => $status,
+            ];
+        }
+
+        $totalRemaining = round($totalBudget - $totalSpent, 2);
+        $overallPct = $totalBudget > 0.0 ? round(($totalSpent / $totalBudget) * 100, 1) : 0.0;
+        $overallStatus = match (true) {
+            $totalBudget > 0.0 && $totalSpent >= $totalBudget => 'exceeded',
+            $overallPct >= 75.0 => 'warning',
+            default => 'safe',
+        };
+
+        return [
+            'month' => $periodMonth,
+            'currency' => $baseCurrency,
+            'total_budget' => round($totalBudget, 2),
+            'total_spent' => round($totalSpent, 2),
+            'total_remaining' => $totalRemaining,
+            'percentage_used' => $overallPct,
+            'status' => $overallStatus,
+            'items' => $items,
+        ];
     }
 }

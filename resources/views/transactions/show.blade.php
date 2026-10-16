@@ -29,7 +29,16 @@
                         <dd>{{ $transaction->occurred_at->format('Y-m-d H:i') }}</dd>
 
                         <dt class="text-gray-500">{{ __('Category') }}</dt>
-                        <dd>{{ $transaction->category ?? '—' }}</dd>
+                        <dd>
+                            @if ($transaction->isSplit())
+                                <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                                    <span>{{ __('Split') }}</span>
+                                    <span class="text-gray-400">({{ $transaction->splits->count() }})</span>
+                                </span>
+                            @else
+                                {{ $transaction->category ?? '—' }}
+                            @endif
+                        </dd>
 
                         <dt class="text-gray-500">{{ __('Note') }}</dt>
                         <dd>{{ $transaction->note ?? '—' }}</dd>
@@ -46,6 +55,39 @@
                             </dd>
                         @endif
                     </dl>
+
+                    @if ($transaction->isSplit())
+                        <div class="border-t border-gray-100 pt-4">
+                            <h3 class="text-sm font-semibold text-gray-800 mb-3">{{ __('Split Details') }}</h3>
+                            <div class="overflow-hidden border border-gray-200 rounded-lg">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="bg-gray-50">
+                                        <tr class="text-xs text-gray-500 uppercase tracking-wider">
+                                            <th class="px-4 py-2 text-left font-medium">{{ __('Category') }}</th>
+                                            <th class="px-4 py-2 text-left font-medium">{{ __('Note') }}</th>
+                                            <th class="px-4 py-2 text-right font-medium">{{ __('Amount') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100 bg-white">
+                                        @foreach ($transaction->splits as $split)
+                                            <tr>
+                                                <td class="px-4 py-2 font-medium text-gray-900">{{ $split->category }}</td>
+                                                <td class="px-4 py-2 text-gray-500">{{ $split->note ?? '—' }}</td>
+                                                <td class="px-4 py-2 text-right font-medium text-gray-900 whitespace-nowrap">
+                                                    {{ number_format($split->amount, 2) }} {{ $transaction->currency }}
+                                                    @if ($transaction->base_amount !== null && $transaction->currency !== $transaction->base_currency)
+                                                        <span class="block text-xs font-normal text-gray-400">
+                                                            {{ number_format($split->base_amount, 2) }} {{ $transaction->base_currency }}
+                                                        </span>
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endif
 
                     <div class="flex items-center gap-4 border-t border-gray-100 pt-4">
                         <a href="{{ route('transactions.edit', $transaction) }}">

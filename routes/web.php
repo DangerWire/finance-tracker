@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RecurringTransactionController;
 use App\Http\Controllers\SpendingInsightController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\TransactionImportController;
@@ -35,7 +37,19 @@ Route::middleware('auth')->group(function () {
     Route::delete('/transactions/imports/{import}', [TransactionImportController::class, 'destroy'])
         ->name('transaction-imports.destroy');
 
+    // Serves the calendar fragment for month navigation. Registered before the
+    // resource, or /transactions/{transaction} captures it as an id and the
+    // lookup 404s.
+    Route::get('/transactions/calendar', [TransactionController::class, 'calendar'])
+        ->name('transactions.calendar');
+
     Route::resource('transactions', TransactionController::class);
+
+    Route::resource('recurring', RecurringTransactionController::class);
+    Route::post('recurring/run', [RecurringTransactionController::class, 'run'])
+        ->name('recurring.run');
+
+    Route::resource('budgets', BudgetController::class);
 
     Route::get('/insights', [SpendingInsightController::class, 'index'])->name('insights.index');
     Route::post('/insights/generate', [SpendingInsightController::class, 'generate'])->name('insights.generate');
