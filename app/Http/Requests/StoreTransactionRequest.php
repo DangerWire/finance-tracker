@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\TransactionType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreTransactionRequest extends FormRequest
 {
@@ -22,7 +23,38 @@ class StoreTransactionRequest extends FormRequest
             'occurred_at' => ['required', 'date'],
             'category' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:1000'],
+            'splits' => ['nullable', 'array'],
+            'splits.*.category' => ['required_with:splits', 'string', 'max:255'],
+            'splits.*.amount' => ['required_with:splits', 'numeric', 'min:0.01'],
+            'splits.*.note' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * Configure the validator instance.
+     *
+     * @param  Validator  $validator
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $splits = $this->input('splits');
+
+            if (is_array($splits) && count($splits) > 0) {
+                if (count($splits) < 2) {
+                    $validator->errors()->add('splits', 'A split transaction must have at least two categories.');
+
+                    return;
+                }
+
+                $totalAmount = (float) $this->input('amount');
+                $splitsTotal = array_sum(array_map(fn ($s) => (float) ($s['amount'] ?? 0), $splits));
+
+                if (abs($totalAmount - $splitsTotal) > 0.01) {
+                    $validator->errors()->add('splits', 'The sum of split amounts must equal the total transaction amount.');
+                }
+            }
+        });
     }
 
     /**

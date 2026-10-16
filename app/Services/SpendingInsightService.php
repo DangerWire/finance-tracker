@@ -117,6 +117,7 @@ class SpendingInsightService
             '- Do not invent categories, dates, merchants or amounts that are not in the data.',
             '- Never mention JSON field names or raw values such as is_unusual, change_percent or share_of_spend_percent. Describe them in plain language instead.',
             '- If the data is too thin to support an insight, return fewer insights. An empty list is better than a guess.',
+            '- If the budgets section has items with status "exceeded" or "warning", highlight those budget alerts proactively using the exact figures supplied.',
             '- Be concise and concrete. No generic advice about budgeting.',
             '',
             'Write every insight in the following language: '.$this->outputLanguageInstruction().'.',

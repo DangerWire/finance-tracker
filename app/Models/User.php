@@ -51,4 +51,24 @@ class User extends Authenticatable
     {
         return $this->hasMany(TransactionImport::class);
     }
+
+    /**
+     * Get the recurring transaction templates this user owns.
+     *
+     * @return HasMany<RecurringTransaction, $this>
+     */
+    public function recurringTransactions(): HasMany
+    {
+        return $this->hasMany(RecurringTransaction::class);
+    }
+
+    /**
+     * Get the monthly budgets owned by the user.
+     *
+     * @return HasMany<Budget, $this>
+     */
+    public function budgets(): HasMany
+    {
+        return $this->hasMany(Budget::class);
+    }
 }

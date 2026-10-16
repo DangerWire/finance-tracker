@@ -545,7 +545,79 @@ class TransactionTest extends TestCase
             ->assertSee('name="date"', false)
             ->assertSee('name="from"', false)
             ->assertSee('name="to"', false)
-            ->assertSee("cell.addEventListener('click'", false);
+            // Delegated on the container rather than bound per cell, because a
+            // month fetch replaces the cells and any direct handler would be
+            // lost along with them.
+            ->assertSee("picker.addEventListener('click'", false)
+            ->assertSee('swapMonth(nav.href)', false);
+    }
+
+    public function test_the_calendar_serves_just_the_month_over_http(): void
+    {
+        config(['finance.base_currency' => 'CNY']);
+
+        $user = User::factory()->create();
+
+        Transaction::factory()->for($user)->create([
+            'occurred_at' => '2026-11-14 12:00:00',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('transactions.calendar', ['month' => '2026-11']));
+
+        $response->assertOk();
+
+        // A fragment, not a page. If this ever renders the layout, month
+        // navigation stops being a swap and silently becomes a full reload
+        // again.
+        $response->assertDontSee('<html', false);
+        $response->assertDontSee('transaction-filters', false);
+
+        // The month actually requested, not the current one.
+        $response->assertSee('data-date="2026-11-14"', false);
+        $response->assertSee('data-calendar-nav="1"', false);
+
+        // No form state. The browser swaps this fragment into the picker, so a
+        // hidden input rendered here would be destroyed on every month change
+        // and leave the form holding detached nodes.
+        $response->assertDontSee('name="date"', false);
+        $response->assertDontSee('name="from"', false);
+        $response->assertDontSee('name="to"', false);
+    }
+
+    public function test_the_calendar_fragment_tolerates_a_missing_or_bad_month(): void
+    {
+        $user = User::factory()->create();
+
+        // Never rejects. A rejection here reaches the user as a full page
+        // reload, which is the behaviour the endpoint exists to remove, so an
+        // unparseable month falls back to the current one instead.
+        $this->actingAs($user)
+            ->get(route('transactions.calendar'))
+            ->assertOk()
+            ->assertDontSee('<html', false);
+
+        $this->actingAs($user)
+            ->get(route('transactions.calendar', ['month' => 'not-a-month']))
+            ->assertOk()
+            ->assertDontSee('<html', false);
+    }
+
+    public function test_a_malformed_month_is_rejected_rather_than_fatal(): void
+    {
+        $user = User::factory()->create();
+
+        // Carbon returns false on a failed createFromFormat rather than
+        // throwing, so an unguarded call in calendarMonth would be a fatal
+        // error. The index validates up front and the fragment endpoint parses
+        // defensively; neither may 500.
+        $this->actingAs($user)
+            ->get(route('transactions.index', ['month' => 'nonsense']))
+            ->assertRedirect();
+
+        $this->actingAs($user)
+            ->get(route('transactions.calendar', ['month' => 'nonsense']))
+            ->assertOk()
+            ->assertDontSee('<html', false);
     }
 
     public function test_the_calendar_marks_a_single_selected_day(): void

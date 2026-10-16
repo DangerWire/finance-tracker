@@ -232,7 +232,16 @@
                                     <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
                                         {{ $transaction->occurred_at->format('Y-m-d') }}
                                     </td>
-                                    <td class="px-6 py-4 text-sm text-gray-700">{{ $transaction->category ?? '—' }}</td>
+                                    <td class="px-6 py-4 text-sm text-gray-700">
+                                        @if ($transaction->isSplit())
+                                            <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                                                <span>{{ __('Split') }}</span>
+                                                <span class="text-gray-400">({{ $transaction->splits->count() }})</span>
+                                            </span>
+                                        @else
+                                            {{ $transaction->category ?? '—' }}
+                                        @endif
+                                    </td>
                                     <td class="px-6 py-4 text-sm">
                                         <span @class([
                                             'inline-flex rounded-full px-2 py-1 text-xs font-medium',
@@ -284,7 +293,15 @@
             // A single day overrides the range, so both can stay filled in:
             // the server gives the day precedence and the notice under the
             // panel states which one is in effect.
-            filterForm.addEventListener('change', () => filterForm.submit());
+            filterForm.addEventListener('change', (event) => {
+                // The calendar's month control navigates rather than filters;
+                // it handles itself and must not also reload the page.
+                if (event.target.closest('[data-calendar-month-select]')) {
+                    return;
+                }
+
+                filterForm.submit();
+            });
         </script>
     @endpush
 </x-app-layout>

@@ -12,6 +12,7 @@
         "prism-php/prism": "^0.100.1"
     },
     "require-dev": {
+        "edneymatias/antigravity-laravel-kit": "^1.3",
         "fakerphp/faker": "^1.23",
         "laravel/boost": "^2.10",
         "laravel/breeze": "^2.4",

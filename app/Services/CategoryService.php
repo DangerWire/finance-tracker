@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Transaction;
+use App\Models\TransactionSplit;
 
 /**
  * Resolves the categories a user has actually used.
@@ -20,16 +21,27 @@ class CategoryService
      */
     public function forUser(int $userId): array
     {
-        return Transaction::query()
+        $transactionCategories = Transaction::query()
             ->where('user_id', $userId)
             ->whereNotNull('category')
             ->where('category', '!=', '')
             ->distinct()
-            ->orderBy('category')
-            ->pluck('category')
+            ->pluck('category');
+
+        $splitCategories = TransactionSplit::query()
+            ->whereHas('transaction', fn ($query) => $query->where('user_id', $userId))
+            ->whereNotNull('category')
+            ->where('category', '!=', '')
+            ->distinct()
+            ->pluck('category');
+
+        return $transactionCategories
+            ->merge($splitCategories)
             ->map(fn (string $category): string => trim($category))
+            ->reject(fn (string $category): bool => strtolower($category) === 'split')
             ->filter()
             ->unique()
+            ->sort(SORT_NATURAL | SORT_FLAG_CASE)
             ->values()
             ->all();
     }

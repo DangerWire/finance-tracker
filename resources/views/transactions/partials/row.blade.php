@@ -17,7 +17,14 @@
             'bg-rose-100 text-rose-800' => $transaction->type === \App\Enums\TransactionType::Expense,
         ])>{{ $transaction->type->label() }}</span>
 
-        <span class="text-sm text-gray-900">{{ $transaction->category ?? '—' }}</span>
+        @if ($transaction->isSplit())
+            <span class="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                <span>{{ __('Split') }}</span>
+                <span class="text-gray-400">({{ $transaction->splits->count() }})</span>
+            </span>
+        @else
+            <span class="text-sm text-gray-900">{{ $transaction->category ?? '—' }}</span>
+        @endif
 
         <span class="text-sm text-gray-500">
             {{ $transaction->occurred_at->format('H:i') }} ·
