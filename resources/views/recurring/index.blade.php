@@ -7,7 +7,7 @@
             <div class="flex items-center gap-3">
                 <form method="POST" action="{{ route('recurring.run') }}">
                     @csrf
-                    <x-secondary-button>{{ __('Run now') }}</x-secondary-button>
+                    <x-secondary-button type="submit">{{ __('Run now') }}</x-secondary-button>
                 </form>
                 <a href="{{ route('recurring.create') }}">
                     <x-primary-button>{{ __('Add recurring') }}</x-primary-button>

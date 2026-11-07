@@ -77,7 +77,7 @@
 
                 @if (! $isConfigured)
                     <p class="text-sm text-gray-500">
-                        {{ __('Set OPENROUTER_API_KEY in .env to enable AI summaries. The figures above are calculated by the database and always accurate.') }}
+                        {{ __('Set GEMINI_API_KEY in .env to enable AI summaries. The figures above are calculated by the database and always accurate.') }}
                     </p>
                 @elseif (! $hasEnoughData)
                     <p class="text-sm text-gray-500">

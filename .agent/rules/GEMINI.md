@@ -115,13 +115,15 @@ Quando o prompt do usuário NÃO estiver em Inglês (como agora, em Português):
 2. Identifique arquivos dependentes
 3. Atualize TODOS os arquivos afetados juntos
 
-### 🗺️ Leitura do Mapa do Sistema
+### 🗺️ Leitura do Mapa do Sistema & Estado do Projeto
 
-> 🔴 **OBRIGATÓRIO:** Leia `ARCHITECTURE.md` no início da sessão para entender Agentes, Skills e Scripts.
+> 🔴 **OBRIGATÓRIO:** No início da sessão ou ao iniciar uma tarefa, leia `PROGRESS.md` e `PROJECT_CONTEXT.md` para entender o progresso atual do projeto, invariantes de arquitetura e tarefas pendentes. Consulte `.agent/ARCHITECTURE.md` para Agentes, Skills e Scripts.
 
 **Consciência de Caminho:**
 
-- Agentes: `.agent/` (Projeto)
+- Progresso & Status: `PROGRESS.md` (Raiz do projeto)
+- Invariantes & Arquitetura: `PROJECT_CONTEXT.md` (Raiz do projeto)
+- Agentes: `.agent/agents/` (Projeto)
 - Skills: `.agent/skills/` (Projeto)
 - Scripts de Runtime: `.agent/scripts/` (PHP nativo)
 

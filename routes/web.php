@@ -45,9 +45,9 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('transactions', TransactionController::class);
 
-    Route::resource('recurring', RecurringTransactionController::class);
     Route::post('recurring/run', [RecurringTransactionController::class, 'run'])
         ->name('recurring.run');
+    Route::resource('recurring', RecurringTransactionController::class);
 
     Route::resource('budgets', BudgetController::class);
 

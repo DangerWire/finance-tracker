@@ -54,7 +54,7 @@
     "Insights have not been generated for this period yet.": "Wawasan belum dibuat untuk periode ini.",
     "Not enough recorded spending to draw a conclusion this month.": "Data pengeluaran bulan ini belum cukup untuk diambil kesimpulan.",
     "Record a few more expenses this month and insights will become available.": "Catat beberapa pengeluaran lagi bulan ini agar Insights dapat digunakan.",
-    "Set OPENROUTER_API_KEY in .env to enable AI summaries. The figures above are calculated by the database and always accurate.": "Atur OPENROUTER_API_KEY di .env untuk mengaktifkan ringkasan AI. Angka di atas dihitung oleh database dan selalu akurat.",
+    "Set GEMINI_API_KEY in .env to enable AI summaries. The figures above are calculated by the database and always accurate.": "Atur GEMINI_API_KEY di .env untuk mengaktifkan ringkasan AI. Angka di atas dihitung oleh database dan selalu akurat.",
     ":count transaction could not be converted to :currency and is excluded from these totals. Run finance:backfill-base-amounts once a rate is available.|:count transactions could not be converted to :currency and are excluded from these totals. Run finance:backfill-base-amounts once a rate is available.": ":count transaksi tidak dapat dikonversi ke :currency dan tidak termasuk dalam total ini. Jalankan finance:backfill-base-amounts setelah tersedia kurs.|:count transaksi tidak dapat dikonversi ke :currency dan tidak termasuk dalam total ini. Jalankan finance:backfill-base-amounts setelah tersedia kurs.",
 
     "Import transactions": "Impor transaksi",
@@ -232,5 +232,19 @@
     "Remove split line": "Hapus baris pemisahan",
     "Add split line": "Tambah baris pemisahan",
     "Total": "Total",
-    "Split Details": "Rincian Pemisahan"
+    "Split Details": "Rincian Pemisahan",
+    "Filter transactions": "Saring transaksi",
+    "Active filters:": "Filter aktif:",
+    "Edit filters": "Edit filter",
+    "Clear all": "Hapus semua",
+    "Close": "Tutup",
+    "This is not the web page you are looking for": "Ini bukan halaman web yang Anda cari",
+    "The page you requested was moved, deleted, or does not exist.": "Halaman yang Anda minta telah dipindahkan, dihapus, atau tidak ada.",
+    "Need help or think this is a mistake?": "Butuh bantuan atau merasa ini sebuah kesalahan?",
+    "Please contact": "Silakan hubungi",
+    "for assistance.": "untuk bantuan.",
+    "Back to Dashboard": "Kembali ke Dasbor",
+    "View Transactions": "Lihat Transaksi",
+    "Back to Home": "Kembali ke Beranda",
+    "Go back": "Kembali"
 }

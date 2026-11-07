@@ -114,18 +114,18 @@ class SpendingInsightTest extends TestCase
 
         $generic = SpendingInsightService::describeFailure(new LogicException('stack trace and paths'));
 
-        $this->assertStringContainsString('OPENROUTER_API_KEY', $generic);
+        $this->assertStringContainsString('GEMINI_API_KEY', $generic);
         $this->assertStringNotContainsString('stack trace', $generic);
     }
 
     public function test_the_model_is_never_given_a_reasoning_task(): void
     {
         // Guards the core design rule: the provider must be configured through
-        // the OpenRouter driver rather than silently defaulting elsewhere.
-        config(['insights.model' => 'openai/gpt-4o-mini']);
+        // the Gemini driver rather than silently defaulting elsewhere.
+        config(['insights.model' => 'gemini-2.5-flash']);
 
-        $this->assertSame('openai/gpt-4o-mini', config('insights.model'));
-        $this->assertTrue(Provider::OpenRouter->value === 'openrouter');
+        $this->assertSame('gemini-2.5-flash', config('insights.model'));
+        $this->assertTrue(Provider::Gemini->value === 'gemini');
     }
 
     private function userWithSpending(int $count): User
