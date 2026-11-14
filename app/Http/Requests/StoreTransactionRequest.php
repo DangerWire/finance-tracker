@@ -62,7 +62,9 @@ class StoreTransactionRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        if ($this->has('currency')) {
+        if (empty($this->currency) && $this->user()) {
+            $this->merge(['currency' => $this->user()->currency]);
+        } elseif ($this->has('currency')) {
             $this->merge(['currency' => strtoupper(trim((string) $this->input('currency')))]);
         }
     }

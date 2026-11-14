@@ -64,6 +64,22 @@
 - Laravel Pint formatting clean across all PHP files.
 - Production assets built with Vite (`app.js`, `app.css`).
 
+### 11. Modern Fintech UI Redesign (Sure.am / Maybe Finance Inspiration)
+- Replaced the previous cyberpunk theme with a sleek, minimalist, developer-centric fintech aesthetic inspired by `app.sure.am` (Maybe Finance fork / basement.studio craft).
+- **Global Palette & Tokens**: Deep obsidian canvas (`#09090b`), hairline borders (`border-white/[0.07]`), elevated card surfaces (`#111218`), and subtle emerald (`#10b981`) and rose (`#f43f5e`) financial delta indicators.
+- **Transactions Tab (`/transactions`)**: High-density ledger with top aggregate metric cards (Income, Expenses, Net Balance), segmented active filters, date-grouped rows, and monospaced tabular figures (`font-mono-num`).
+- **Insights Tab (`/insights`)**: Clean analytics suite featuring a Google Gemini 2.5 Flash intelligence hub, spending KPI cards, and category allocation progress bars.
+- **Landing Page (`/`)**: High-craft SaaS presentation with an interactive live dashboard mockup, net worth SVG area curve, and a 4-pillar bento feature grid.
+- **Core Components**: Redesigned buttons, inputs, dropdowns, navigation pills, and application mark.
+
+### 12. User Main Currency & Locked Transaction Currency (Completed 2026-11-14)
+- Added user-selectable primary currency in profile settings (`/profile`), stored on `users.currency` with dynamic fallback to `config('finance.base_currency')`.
+- Supported currencies list in `config/finance.php`: IDR, USD, EUR, CNY, JPY, GBP, SGD, AUD, MYR.
+- Locked currency field in Income & Expense forms (`resources/views/transactions/partials/form.blade.php`) with lock indicator and direct link to Settings.
+- Optional automatic recalculation of past transaction base amounts and conversion rates upon changing the primary currency.
+- Redesigned Profile & Settings views in the Sure.am dark aesthetic.
+- Full test coverage in `tests/Feature/CurrencySettingsTest.php` (199 total tests passing).
+
 ---
 
 ## 🚀 In Progress / Next Up

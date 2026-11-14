@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\TransactionType;
 use App\Models\Budget;
 use App\Models\Transaction;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -43,7 +44,8 @@ class SpendingStatsService
     {
         $through ??= CarbonImmutable::now();
 
-        $baseCurrency = strtoupper((string) config('finance.base_currency'));
+        $user = User::find($userId);
+        $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
 
         $totals = $this->monthlyTotals($userId, $through);
         $currentPeriod = $through->format('Y-m');
@@ -319,11 +321,14 @@ class SpendingStatsService
      */
     private function expenseQuery(int $userId): Builder
     {
+        $user = User::find($userId);
+        $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
+
         return Transaction::query()
             ->where('user_id', $userId)
             ->where('type', TransactionType::Expense)
             ->whereNotNull('base_amount')
-            ->where('base_currency', strtoupper((string) config('finance.base_currency')));
+            ->where('base_currency', $baseCurrency);
     }
 
     /**
@@ -364,7 +369,8 @@ class SpendingStatsService
     {
         $through ??= CarbonImmutable::now();
         $periodMonth = $through->format('Y-m');
-        $baseCurrency = strtoupper((string) config('finance.base_currency'));
+        $user = User::find($userId);
+        $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
 
         $monthStart = $through->startOfMonth();
         $monthEnd = $through->endOfMonth();

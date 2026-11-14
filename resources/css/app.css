@@ -2,190 +2,143 @@
 @tailwind components;
 @tailwind utilities;
 
+/* -------------------------------------------------------------
+ * Sure.am / Maybe Modern Fintech Design Tokens
+ * ------------------------------------------------------------- */
 
-/* Tactical Cyberpunk Utilities */
-.cyber-grid {
+/* Ambient & Surface Textures */
+.sure-grid {
     background-image:
-        linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-    background-size: 44px 44px;
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
 }
 
-.cyber-grid-dense {
-    background-image:
-        linear-gradient(to right, rgba(255, 229, 0, 0.06) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 229, 0, 0.06) 1px, transparent 1px);
-    background-size: 20px 20px;
+.sure-radial-glow {
+    background: radial-gradient(ellipse 80% 60% at 50% -20%, rgba(16, 185, 129, 0.08), rgba(255, 255, 255, 0));
 }
 
-.clip-chamfer {
-    clip-path: polygon(
-        12px 0%,
-        100% 0%,
-        100% calc(100% - 12px),
-        calc(100% - 12px) 100%,
-        0% 100%,
-        0% 12px
-    );
+.sure-card {
+    background-color: #111218;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
 }
 
-.clip-chamfer-lg {
-    clip-path: polygon(
-        22px 0%,
-        100% 0%,
-        100% calc(100% - 22px),
-        calc(100% - 22px) 100%,
-        0% 100%,
-        0% 22px
-    );
+.sure-card-subtle {
+    background-color: #0d0e13;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.clip-badge {
-    clip-path: polygon(
-        0% 0%,
-        calc(100% - 8px) 0%,
-        100% 8px,
-        100% 100%,
-        8px 100%,
-        0% calc(100% - 8px)
-    );
+/* Tabular number alignment for financial precision */
+.font-mono-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-feature-settings: 'tnum' on, 'zero' on;
 }
 
-.glow-amber-box {
-    box-shadow: 0 0 25px rgba(255, 229, 0, 0.22), inset 0 0 15px rgba(255, 229, 0, 0.08);
+/* Micro-interaction & transitions */
+.sure-hover-lift {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.glow-cyan-box {
-    box-shadow: 0 0 25px rgba(0, 240, 255, 0.22), inset 0 0 15px rgba(0, 240, 255, 0.08);
+.sure-hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
 }
 
-.glow-text-amber {
-    text-shadow: 0 0 16px rgba(255, 229, 0, 0.65);
-}
-
-.glow-text-cyan {
-    text-shadow: 0 0 16px rgba(0, 240, 255, 0.65);
-}
-
-.glow-amber-btn:hover {
-    box-shadow: 0 0 35px rgba(255, 229, 0, 0.45);
-}
-
-.hazard-stripe {
-    background: repeating-linear-gradient(
-        -45deg,
-        rgba(255, 229, 0, 0.8),
-        rgba(255, 229, 0, 0.8) 10px,
-        rgba(15, 17, 23, 0.9) 10px,
-        rgba(15, 17, 23, 0.9) 20px
-    );
-}
-
-/* Landing Page Slide Presentation */
-.cyber-slide {
-    will-change: transform, opacity;
-}
-
-.cyber-slide:not(:first-child) {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-}
-
-/* Cyberpunk Command OS Global Theme Overrides */
+/* -------------------------------------------------------------
+ * Dark Mode Theme Overrides
+ * ------------------------------------------------------------- */
 .dark body {
-    background-color: #07080b;
-    color: #f1f5f9;
+    background-color: #09090b;
+    color: #f4f4f5;
 }
 
 .dark .bg-white {
-    background-color: #0c1017 !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-    color: #e2e8f0 !important;
+    background-color: #111218 !important;
+    border-color: rgba(255, 255, 255, 0.07) !important;
+    color: #f4f4f5 !important;
 }
 
 .dark .bg-gray-50 {
-    background-color: #080a0f !important;
+    background-color: #0d0e13 !important;
 }
 
 .dark .bg-gray-100 {
-    background-color: #07080b !important;
+    background-color: #09090b !important;
 }
 
 .dark .text-gray-900,
 .dark .text-gray-800 {
-    color: #f8fafc !important;
+    color: #f4f4f5 !important;
 }
 
 .dark .text-gray-700,
 .dark .text-gray-600 {
-    color: #94a3b8 !important;
+    color: #a1a1aa !important;
 }
 
 .dark .text-gray-500,
 .dark .text-gray-400 {
-    color: #64748b !important;
+    color: #71717a !important;
 }
 
 .dark .border-gray-100,
 .dark .border-gray-200,
 .dark .border-gray-300 {
-    border-color: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.07) !important;
 }
 
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
 .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
-    border-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.06) !important;
 }
 
 .dark table thead th {
-    background-color: #080b10 !important;
-    color: #94a3b8 !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-    font-family: 'JetBrains Mono', monospace;
+    background-color: #0c0d12 !important;
+    color: #71717a !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
     font-size: 0.75rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.03em;
 }
 
 .dark table tbody tr {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+    transition: background-color 0.15s ease;
 }
 
 .dark table tbody tr:hover td {
-    background-color: rgba(255, 229, 0, 0.03) !important;
+    background-color: rgba(255, 255, 255, 0.02) !important;
 }
 
 .dark .shadow-sm,
 .dark .shadow,
 .dark .shadow-md,
 .dark .shadow-lg {
-    box-shadow: 0 4px 25px -4px rgba(0, 0, 0, 0.8), 0 0 1px 1px rgba(255, 255, 255, 0.06) !important;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.04) !important;
 }
 
+/* Clean accents */
 .dark .bg-indigo-50,
 .dark .bg-indigo-100 {
-    background-color: rgba(255, 229, 0, 0.15) !important;
-    color: #FFE500 !important;
+    background-color: rgba(16, 185, 129, 0.1) !important;
+    color: #34d399 !important;
 }
 
 .dark .text-indigo-600,
 .dark .text-indigo-700,
 .dark .text-indigo-800 {
-    color: #FFE500 !important;
+    color: #34d399 !important;
 }
 
 .dark .border-indigo-400,
 .dark .border-indigo-500,
 .dark .border-indigo-600 {
-    border-color: #FFE500 !important;
+    border-color: #10b981 !important;
 }
 
 .dark .focus\:ring-indigo-500:focus,
 .dark .focus\:border-indigo-500:focus {
-    --tw-ring-color: #FFE500 !important;
-    border-color: #FFE500 !important;
-}
-
-.font-mono-tech {
-    font-family: 'JetBrains Mono', monospace;
+    --tw-ring-color: #10b981 !important;
+    border-color: #10b981 !important;
 }

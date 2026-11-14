@@ -1,13 +1,8 @@
-<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" {{ $attributes }}>
-    <!-- Chamfered Hex Tactical Shield -->
-    <polygon points="12,4 36,4 44,12 44,36 36,44 12,44 4,36 4,12" fill="#0C1017" stroke="#FFE500" stroke-width="2" stroke-linejoin="round" />
-    <!-- Tech Accent Corners -->
-    <path d="M4 18L10 12M44 30L38 36" stroke="#00F0FF" stroke-width="1.5" stroke-linecap="round" />
-    <!-- Center FT Cyber Core -->
-    <path d="M15 17H33M24 17V33M24 24H31" stroke="#FFE500" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-    <circle cx="24" cy="24" r="1.5" fill="#00F0FF" />
-    <!-- Tactical Tech Dots -->
-    <circle cx="12" cy="8" r="1" fill="#FFE500" />
-    <circle cx="36" cy="40" r="1" fill="#00F0FF" />
+<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" {{ $attributes }}>
+    <!-- Modern Minimalist Vault Core Mark (Sure / Maybe Inspired) -->
+    <rect width="32" height="32" rx="8" fill="#18181B" stroke="rgba(255, 255, 255, 0.1)" stroke-width="1"/>
+    <!-- Interlocking Currency Flow Curves -->
+    <path d="M10 20C10 15.5817 13.5817 12 18 12H22M22 12C22 16.4183 18.4183 20 14 20H10" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="10" cy="20" r="2" fill="#10B981"/>
+    <circle cx="22" cy="12" r="2" fill="#FAFAFA"/>
 </svg>
-

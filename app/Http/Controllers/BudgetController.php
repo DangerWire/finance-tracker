@@ -33,7 +33,7 @@ class BudgetController extends Controller
             'prevMonth' => $monthDate->subMonthNoOverflow()->format('Y-m'),
             'nextMonth' => $monthDate->addMonthNoOverflow()->format('Y-m'),
             'categories' => $userCategories,
-            'baseCurrency' => strtoupper((string) config('finance.base_currency')),
+            'baseCurrency' => strtoupper((string) ($request->user()->currency ?? config('finance.base_currency'))),
         ]);
     }
 

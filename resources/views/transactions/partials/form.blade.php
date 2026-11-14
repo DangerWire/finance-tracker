@@ -68,9 +68,30 @@
         </div>
 
         <div>
-            <x-input-label for="currency" :value="__('Currency')" />
-            <input id="currency" name="currency" type="text" maxlength="3" required
-                class="{{ $fieldClass }} uppercase" value="{{ old('currency', $transaction->currency ?? 'CNY') }}">
+            <div class="flex items-center justify-between">
+                <x-input-label for="currency" :value="__('Currency')" />
+                <span class="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400 bg-zinc-800/80 px-1.5 py-0.5 rounded border border-white/[0.06]">
+                    <svg class="w-3 h-3 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                    {{ __('Locked') }}
+                </span>
+            </div>
+            @php
+                $userCurrency = strtoupper((string) (auth()->user()?->currency ?? $transaction->currency ?? config('finance.base_currency')));
+            @endphp
+            <div class="relative mt-1">
+                <input id="currency_display" type="text" disabled readonly
+                    class="{{ $fieldClass }} uppercase bg-zinc-900/50 text-zinc-400 border-zinc-800 cursor-not-allowed select-none font-mono"
+                    value="{{ $userCurrency }}">
+                <input type="hidden" id="currency" name="currency" value="{{ old('currency', $userCurrency) }}">
+            </div>
+            <p class="mt-1.5 text-xs text-zinc-400 flex items-center gap-1">
+                <span>{{ __('Configured via') }}</span>
+                <a href="{{ route('profile.edit') }}" class="text-emerald-400 hover:text-emerald-300 font-medium underline transition-colors">
+                    {{ __('Settings') }}
+                </a>
+            </p>
             <x-input-error class="mt-2" :messages="$errors->get('currency')" />
         </div>
 
