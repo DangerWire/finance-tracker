@@ -34,6 +34,14 @@
                     <x-nav-link :href="route('insights.index')" :active="request()->routeIs('insights.*')">
                         {{ __('Insights') }}
                     </x-nav-link>
+
+                    <x-nav-link :href="Route::has('friends.index') ? route('friends.index') : url('/friends')" :active="request()->routeIs('friends.*')">
+                        {{ __('Friends') }}
+                    </x-nav-link>
+
+                    <x-nav-link :href="Route::has('debts.index') ? route('debts.index') : url('/debts')" :active="request()->routeIs('debts.*')">
+                        {{ __('Debts') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -105,6 +113,14 @@
 
             <x-responsive-nav-link :href="route('insights.index')" :active="request()->routeIs('insights.*')">
                 {{ __('Insights') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="Route::has('friends.index') ? route('friends.index') : url('/friends')" :active="request()->routeIs('friends.*')">
+                {{ __('Friends') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="Route::has('debts.index') ? route('debts.index') : url('/debts')" :active="request()->routeIs('debts.*')">
+                {{ __('Debts') }}
             </x-responsive-nav-link>
 
             <div class="pt-3">
