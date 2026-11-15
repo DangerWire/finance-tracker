@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\BudgetController;
+use App\Http\Controllers\DebtController;
+use App\Http\Controllers\FriendshipController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
@@ -50,6 +52,19 @@ Route::middleware('auth')->group(function () {
     Route::resource('recurring', RecurringTransactionController::class);
 
     Route::resource('budgets', BudgetController::class);
+
+    Route::get('/friends', [FriendshipController::class, 'index'])->name('friends.index');
+    Route::post('/friends', [FriendshipController::class, 'store'])->name('friends.store');
+    Route::patch('/friends/{friendship}', [FriendshipController::class, 'update'])->name('friends.update');
+    Route::delete('/friends/{friendship}', [FriendshipController::class, 'destroy'])->name('friends.destroy');
+
+    Route::get('/debts', [DebtController::class, 'index'])->name('debts.index');
+    Route::post('/debts', [DebtController::class, 'store'])->name('debts.store');
+    Route::post('/debts/{debt}/accept', [DebtController::class, 'accept'])->name('debts.accept');
+    Route::post('/debts/{debt}/decline', [DebtController::class, 'decline'])->name('debts.decline');
+    Route::post('/debts/{debt}/pay', [DebtController::class, 'pay'])->name('debts.pay');
+    Route::post('/debts/{debt}/confirm', [DebtController::class, 'confirm'])->name('debts.confirm');
+    Route::post('/debts/{debt}/dispute', [DebtController::class, 'dispute'])->name('debts.dispute');
 
     Route::get('/insights', [SpendingInsightController::class, 'index'])->name('insights.index');
     Route::post('/insights/generate', [SpendingInsightController::class, 'generate'])->name('insights.generate');
