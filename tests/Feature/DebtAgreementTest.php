@@ -189,4 +189,47 @@ class DebtAgreementTest extends TestCase
             ->post(route('debts.decline', $debt))
             ->assertForbidden();
     }
+
+    public function test_user_cannot_accept_already_active_loan(): void
+    {
+        $lender = User::factory()->create();
+        $borrower = User::factory()->create();
+
+        $debt = Debt::factory()->active()->create([
+            'creator_id' => $lender->id,
+            'lender_id' => $lender->id,
+            'borrower_id' => $borrower->id,
+        ]);
+
+        $this->actingAs($borrower)
+            ->post(route('debts.accept', $debt))
+            ->assertStatus(400);
+    }
+
+    public function test_debts_index_only_displays_debts_involving_the_authenticated_user(): void
+    {
+        $alice = User::factory()->create(['name' => 'Alice']);
+        $bob = User::factory()->create(['name' => 'Bob']);
+        $stranger = User::factory()->create(['name' => 'Stranger']);
+
+        $debt = Debt::factory()->active()->create([
+            'creator_id' => $alice->id,
+            'lender_id' => $alice->id,
+            'borrower_id' => $bob->id,
+            'note' => 'Secret loan between Alice and Bob',
+            'amount' => 999.00,
+        ]);
+
+        $this->actingAs($stranger)
+            ->get(route('debts.index'))
+            ->assertOk()
+            ->assertDontSee('Secret loan between Alice and Bob')
+            ->assertDontSee('999.00');
+
+        $this->actingAs($alice)
+            ->get(route('debts.index'))
+            ->assertOk()
+            ->assertSee('Secret loan between Alice and Bob')
+            ->assertSee('999.00');
+    }
 }

@@ -68,6 +68,43 @@ class FriendshipTest extends TestCase
         $this->assertDatabaseCount('friendships', 1);
     }
 
+    public function test_user_cannot_send_friend_request_when_reverse_request_is_pending(): void
+    {
+        $sender = User::factory()->create();
+        $recipient = User::factory()->create();
+
+        Friendship::factory()->create([
+            'user_id' => $sender->id,
+            'friend_id' => $recipient->id,
+            'status' => FriendshipStatus::Pending,
+        ]);
+
+        $this->actingAs($recipient)
+            ->post(route('friends.store'), ['email' => $sender->email])
+            ->assertSessionHasErrors('email');
+
+        $this->assertDatabaseCount('friendships', 1);
+    }
+
+    public function test_user_cannot_send_friend_request_when_already_friends(): void
+    {
+        $user = User::factory()->create();
+        $friend = User::factory()->create();
+
+        Friendship::factory()->accepted()->create([
+            'user_id' => $user->id,
+            'friend_id' => $friend->id,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('friends.store'), ['email' => $friend->email])
+            ->assertSessionHasErrors('email');
+
+        $this->actingAs($friend)
+            ->post(route('friends.store'), ['email' => $user->email])
+            ->assertSessionHasErrors('email');
+    }
+
     public function test_user_can_accept_friend_request(): void
     {
         $sender = User::factory()->create();

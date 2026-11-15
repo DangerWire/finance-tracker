@@ -6,6 +6,7 @@ use App\Actions\SettleDebtAction;
 use App\Enums\DebtStatus;
 use App\Enums\TransactionType;
 use App\Models\Debt;
+use App\Models\ExchangeRate;
 use App\Models\Transaction;
 use App\Models\User;
 use DomainException;
@@ -156,5 +157,71 @@ class DebtSettlementTest extends TestCase
         $this->expectException(DomainException::class);
 
         app(SettleDebtAction::class)->execute($debt);
+    }
+
+    public function test_settlement_converts_amounts_when_parties_have_different_currencies(): void
+    {
+        $lender = User::factory()->create(['name' => 'Alice', 'currency' => 'CNY']);
+        $borrower = User::factory()->create(['name' => 'Bob', 'currency' => 'USD']);
+
+        ExchangeRate::query()->create([
+            'base_currency' => 'USD',
+            'quote_currency' => 'CNY',
+            'rate_date' => now()->toDateString(),
+            'rate' => 7.20000000,
+        ]);
+
+        $debt = Debt::factory()->paymentSubmitted()->create([
+            'creator_id' => $lender->id,
+            'lender_id' => $lender->id,
+            'borrower_id' => $borrower->id,
+            'amount' => 100.00,
+            'currency' => 'USD',
+            'note' => 'Cross-border loan',
+        ]);
+
+        $this->actingAs($lender)
+            ->post(route('debts.confirm', $debt))
+            ->assertRedirect(route('debts.index'));
+
+        $freshDebt = $debt->fresh();
+        $this->assertSame(DebtStatus::Settled, $freshDebt->status);
+
+        $lenderTx = Transaction::find($freshDebt->lender_transaction_id);
+        $this->assertNotNull($lenderTx);
+        $this->assertSame('USD', $lenderTx->currency);
+        $this->assertEquals(100.00, $lenderTx->amount);
+        $this->assertSame('CNY', $lenderTx->base_currency);
+        $this->assertEquals(720.00, $lenderTx->base_amount);
+        $this->assertEquals(7.20000000, $lenderTx->applied_rate);
+
+        $borrowerTx = Transaction::find($freshDebt->borrower_transaction_id);
+        $this->assertNotNull($borrowerTx);
+        $this->assertSame('USD', $borrowerTx->currency);
+        $this->assertEquals(100.00, $borrowerTx->amount);
+        $this->assertSame('USD', $borrowerTx->base_currency);
+        $this->assertEquals(100.00, $borrowerTx->base_amount);
+        $this->assertEquals(1.0, $borrowerTx->applied_rate);
+    }
+
+    public function test_unrelated_user_cannot_confirm_or_dispute_payment(): void
+    {
+        $lender = User::factory()->create();
+        $borrower = User::factory()->create();
+        $intruder = User::factory()->create();
+
+        $debt = Debt::factory()->paymentSubmitted()->create([
+            'creator_id' => $lender->id,
+            'lender_id' => $lender->id,
+            'borrower_id' => $borrower->id,
+        ]);
+
+        $this->actingAs($intruder)
+            ->post(route('debts.confirm', $debt))
+            ->assertForbidden();
+
+        $this->actingAs($intruder)
+            ->post(route('debts.dispute', $debt))
+            ->assertForbidden();
     }
 }
