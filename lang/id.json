@@ -345,5 +345,13 @@
     "Loan proposal declined.": "Usulan pinjaman ditolak.",
     "Payment submitted. Awaiting lender confirmation.": "Pembayaran dikirim. Menunggu konfirmasi dari pemberi pinjaman.",
     "Payment confirmed and debt settled. Ledger updated.": "Pembayaran dikonfirmasi dan pinjaman lunas. Buku besar diperbarui.",
-    "Payment disputed. Loan returned to active status.": "Pembayaran disanggah. Pinjaman dikembalikan ke status aktif."
+    "Payment disputed. Loan returned to active status.": "Pembayaran disanggah. Pinjaman dikembalikan ke status aktif.",
+    "Record a new inflow or outflow to your financial ledger.": "Catat arus kas masuk atau keluar baru ke buku kas keuangan Anda.",
+    "Back to transactions": "Kembali ke transaksi",
+    "Update details or re-allocate categories for this record.": "Perbarui detail atau alokasikan ulang kategori untuk catatan ini.",
+    "Danger Zone": "Zona Bahaya",
+    "Permanently remove this entry from your financial ledger.": "Hapus entri ini secara permanen dari buku kas keuangan Anda.",
+    "e.g. Groceries, Entertainment, Utilities": "cth. Belanja, Hiburan, Utilitas",
+    "Add details, reference numbers, or context...": "Tambahkan detail, nomor referensi, atau konteks...",
+    "Detailed record information and breakdown.": "Informasi catatan detail dan rincian."
 }

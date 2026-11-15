@@ -1,7 +1,7 @@
 @php
     /** @var \App\Models\Transaction $transaction */
     $isEdit = $transaction->exists;
-    $fieldClass = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500';
+    $fieldClass = 'mt-1 block w-full rounded-lg bg-zinc-900/80 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-sm shadow-inner focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 focus:outline-none transition duration-150 px-3 py-2';
     $existingSplits = old('splits');
     if ($existingSplits === null && $transaction->exists && $transaction->relationLoaded('splits') && $transaction->splits->isNotEmpty()) {
         $existingSplits = $transaction->splits->map(fn ($s) => [
@@ -50,9 +50,9 @@
     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <div>
             <x-input-label for="type" :value="__('Type')" />
-            <select id="type" name="type" required class="{{ $fieldClass }}">
+            <select id="type" name="type" required class="{{ $fieldClass }} cursor-pointer">
                 @foreach ($types as $type)
-                    <option value="{{ $type->value }}" @selected(old('type', $transaction->type?->value) === $type->value)>
+                    <option value="{{ $type->value }}" class="bg-zinc-900 text-zinc-100" @selected(old('type', $transaction->type?->value) === $type->value)>
                         {{ $type->label() }}
                     </option>
                 @endforeach
@@ -62,8 +62,8 @@
 
         <div>
             <x-input-label for="amount" :value="__('Amount')" />
-            <input id="amount" name="amount" type="number" step="0.01" min="0.01" required class="{{ $fieldClass }}"
-                x-model="totalAmount" value="{{ old('amount', $transaction->amount) }}">
+            <input id="amount" name="amount" type="number" step="0.01" min="0.01" required class="{{ $fieldClass }} font-mono-num"
+                x-model="totalAmount" value="{{ old('amount', $transaction->amount) }}" placeholder="0.00">
             <x-input-error class="mt-2" :messages="$errors->get('amount')" />
         </div>
 
@@ -82,7 +82,7 @@
             @endphp
             <div class="relative mt-1">
                 <input id="currency_display" type="text" disabled readonly
-                    class="{{ $fieldClass }} uppercase bg-zinc-900/50 text-zinc-400 border-zinc-800 cursor-not-allowed select-none font-mono"
+                    class="{{ $fieldClass }} uppercase bg-zinc-950/60 text-zinc-400 border-zinc-800/80 cursor-not-allowed select-none font-mono"
                     value="{{ $userCurrency }}">
                 <input type="hidden" id="currency" name="currency" value="{{ old('currency', $userCurrency) }}">
             </div>
@@ -97,16 +97,16 @@
 
         <div>
             <x-input-label for="occurred_at" :value="__('Date')" />
-            <input id="occurred_at" name="occurred_at" type="datetime-local" required class="{{ $fieldClass }}"
+            <input id="occurred_at" name="occurred_at" type="datetime-local" required class="{{ $fieldClass }} [color-scheme:dark]"
                 value="{{ old('occurred_at', $transaction->occurred_at?->format('Y-m-d\TH:i')) }}">
             <x-input-error class="mt-2" :messages="$errors->get('occurred_at')" />
         </div>
 
         <div class="sm:col-span-2">
             <div class="flex items-center justify-between">
-                <label class="inline-flex items-center cursor-pointer">
-                    <input type="checkbox" x-model="isSplit" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500">
-                    <span class="ml-2 text-sm font-medium text-gray-700">{{ __('Split this transaction across multiple categories') }}</span>
+                <label class="inline-flex items-center cursor-pointer select-none">
+                    <input type="checkbox" x-model="isSplit" class="rounded bg-zinc-900 border-zinc-800 text-emerald-500 shadow-sm focus:ring-emerald-500/20">
+                    <span class="ml-2 text-xs font-medium text-zinc-300">{{ __('Split this transaction across multiple categories') }}</span>
                 </label>
             </div>
         </div>
@@ -114,22 +114,22 @@
         <div class="sm:col-span-2" x-show="!isSplit">
             <x-input-label for="category" :value="__('Category')" />
             <input id="category" name="category" type="text" list="category-options" class="{{ $fieldClass }}"
-                :disabled="isSplit" value="{{ old('category', $transaction->category) }}">
+                :disabled="isSplit" value="{{ old('category', $transaction->category) }}" placeholder="{{ __('e.g. Groceries, Entertainment, Utilities') }}">
             <x-input-error class="mt-2" :messages="$errors->get('category')" />
         </div>
 
         <template x-if="isSplit">
-            <div class="sm:col-span-2 bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
+            <div class="sm:col-span-2 bg-[#09090b]/80 border border-white/[0.08] rounded-xl p-4 space-y-4">
                 <div class="flex items-center justify-between">
-                    <h4 class="text-sm font-semibold text-gray-800">{{ __('Split Line Items') }}</h4>
+                    <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">{{ __('Split Line Items') }}</h4>
                     <div class="text-xs font-medium">
-                        <span x-show="isBalanced" class="inline-flex items-center text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+                        <span x-show="isBalanced" class="inline-flex items-center text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[11px]">
                             ✓ {{ __('Allocated in full') }}
                         </span>
-                        <span x-show="!isBalanced && remainingAmount > 0" class="inline-flex items-center text-amber-700 bg-amber-50 px-2 py-1 rounded">
+                        <span x-show="!isBalanced && remainingAmount > 0" class="inline-flex items-center text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded text-[11px]">
                             <span x-text="remainingAmount.toFixed(2)"></span> {{ __('remaining to allocate') }}
                         </span>
-                        <span x-show="!isBalanced && remainingAmount < 0" class="inline-flex items-center text-rose-700 bg-rose-50 px-2 py-1 rounded">
+                        <span x-show="!isBalanced && remainingAmount < 0" class="inline-flex items-center text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded text-[11px]">
                             <span x-text="Math.abs(remainingAmount).toFixed(2)"></span> {{ __('over allocated amount') }}
                         </span>
                     </div>
@@ -139,36 +139,36 @@
 
                 <div class="space-y-3">
                     <template x-for="(split, index) in splits" :key="index">
-                        <div class="p-3 bg-white border border-gray-200 rounded-md shadow-sm space-y-3">
+                        <div class="p-3 bg-zinc-900/60 border border-zinc-800 rounded-lg shadow-sm space-y-3">
                             <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                                 <div class="sm:col-span-5">
-                                    <label class="block text-xs font-medium text-gray-600">{{ __('Category') }}</label>
+                                    <label class="block text-[11px] font-medium text-zinc-400 mb-1">{{ __('Category') }}</label>
                                     <input type="text" list="category-options" :name="`splits[${index}][category]`" x-model="split.category" required
-                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="mt-1 block w-full rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs px-3 py-2 shadow-inner focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 focus:outline-none"
                                         placeholder="{{ __('e.g. Groceries') }}">
                                 </div>
                                 <div class="sm:col-span-3">
-                                    <div class="flex items-center justify-between">
-                                        <label class="block text-xs font-medium text-gray-600">{{ __('Amount') }}</label>
-                                        <button type="button" @click="assignRemaining(index)" x-show="remainingAmount > 0" class="text-xs text-indigo-600 hover:text-indigo-800 underline">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="block text-[11px] font-medium text-zinc-400">{{ __('Amount') }}</label>
+                                        <button type="button" @click="assignRemaining(index)" x-show="remainingAmount > 0" class="text-[11px] text-emerald-400 hover:text-emerald-300 underline font-medium">
                                             {{ __('Fill remaining') }}
                                         </button>
                                     </div>
                                     <input type="number" step="0.01" min="0.01" :name="`splits[${index}][amount]`" x-model.number="split.amount" required
-                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="mt-1 block w-full rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs px-3 py-2 font-mono-num shadow-inner focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 focus:outline-none"
                                         placeholder="0.00">
                                 </div>
                                 <div class="sm:col-span-3">
-                                    <label class="block text-xs font-medium text-gray-600">{{ __('Note') }}</label>
+                                    <label class="block text-[11px] font-medium text-zinc-400 mb-1">{{ __('Note') }}</label>
                                     <input type="text" :name="`splits[${index}][note]`" x-model="split.note"
-                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        class="mt-1 block w-full rounded-lg bg-zinc-900/90 border border-zinc-800 text-zinc-100 placeholder-zinc-500 text-xs px-3 py-2 shadow-inner focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500 focus:outline-none"
                                         placeholder="{{ __('Optional') }}">
                                 </div>
                                 <div class="sm:col-span-1 flex justify-end">
                                     <button type="button" @click="removeLine(index)" :disabled="splits.length <= 2"
-                                        class="p-2 text-gray-400 hover:text-rose-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                        class="p-2 text-zinc-500 hover:text-rose-400 disabled:opacity-30 disabled:cursor-not-allowed transition"
                                         title="{{ __('Remove split line') }}">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
@@ -178,15 +178,15 @@
                     </template>
                 </div>
 
-                <div class="pt-2 flex items-center justify-between">
-                    <button type="button" @click="addLine" class="inline-flex items-center text-xs font-medium text-indigo-600 hover:text-indigo-800">
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="pt-2 flex items-center justify-between border-t border-white/[0.04]">
+                    <button type="button" @click="addLine" class="inline-flex items-center text-xs font-medium text-emerald-400 hover:text-emerald-300 transition">
+                        <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                         </svg>
                         {{ __('Add split line') }}
                     </button>
-                    <span class="text-xs text-gray-500">
-                        {{ __('Total') }}: <span class="font-medium" x-text="allocatedTotal.toFixed(2)"></span> / <span class="font-medium" x-text="totalAmount ? parseFloat(totalAmount).toFixed(2) : '0.00'"></span>
+                    <span class="text-xs text-zinc-400">
+                        {{ __('Total') }}: <span class="font-mono text-zinc-200" x-text="allocatedTotal.toFixed(2)"></span> / <span class="font-mono text-zinc-200" x-text="totalAmount ? parseFloat(totalAmount).toFixed(2) : '0.00'"></span>
                     </span>
                 </div>
             </div>
@@ -200,14 +200,14 @@
 
         <div class="sm:col-span-2">
             <x-input-label for="note" :value="__('Note')" />
-            <textarea id="note" name="note" rows="3" class="{{ $fieldClass }}">{{ old('note', $transaction->note) }}</textarea>
+            <textarea id="note" name="note" rows="3" class="{{ $fieldClass }}" placeholder="{{ __('Add details, reference numbers, or context...') }}">{{ old('note', $transaction->note) }}</textarea>
             <x-input-error class="mt-2" :messages="$errors->get('note')" />
         </div>
     </div>
 
-    <div class="mt-6 flex items-center gap-4">
+    <div class="mt-8 pt-4 border-t border-white/[0.06] flex items-center gap-3">
         <x-primary-button>{{ $isEdit ? __('Save changes') : __('Add transaction') }}</x-primary-button>
-        <a href="{{ route('transactions.index') }}" class="text-sm text-gray-600 hover:text-gray-900">
+        <a href="{{ route('transactions.index') }}" class="px-4 py-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition">
             {{ __('Cancel') }}
         </a>
     </div>
