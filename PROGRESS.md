@@ -80,18 +80,23 @@
 - Redesigned Profile & Settings views in the Sure.am dark aesthetic.
 - Full test coverage in `tests/Feature/CurrencySettingsTest.php` (199 total tests passing).
 
+### 13. Friends & Peer-to-Peer Debt Settlement Engine (Completed 2026-11-15 via Swarm)
+- **Friend Connection Network**: Sending, accepting, declining, and removing friend connections via `/friends`.
+- **Two-Party Loan Agreement Protocol**: Creation of loans (lent/borrowed) starts in `pending_acceptance`; counterparty must accept or decline before the loan becomes `active`.
+- **Mutual Repayment Confirmation**:
+  - Debtor (borrower) marks payment submitted (`payment_submitted`).
+  - Creditor (lender) can dispute (`active`) or confirm receipt (`settled`).
+- **Atomic Dual-Ledger Sync**: `App\Actions\SettleDebtAction` runs inside a DB transaction with row locking (`lockForUpdate`), posting `+` Income (`Debt Repayment`) for the lender and `-` Expense (`Debt Settlement`) for the borrower through `ConvertTransactionAmount`.
+- **Tactical UI Hubs**:
+  - `/friends`: Search/add by email, pending requests, active friends list with action menus.
+  - `/debts`: KPI metrics (Total Lent, Total Borrowed, Net Position), pending approvals, active loans, awaiting confirmation alerts, settled history, and 'Record Loan' modal.
+- **Verification & Testing**:
+  - 28 new feature tests across `FriendshipTest`, `DebtAgreementTest`, and `DebtSettlementTest`.
+  - All 227 tests in the suite pass (660 assertions).
+
 ---
 
 ## 🚀 In Progress / Next Up
-
-### Feature: Friends & Peer-to-Peer Debt Settlement (Ready for Implementation)
-* **Objective**: Connect friends and track borrowed/lent funds with a 2-party confirmation protocol that automatically generates income (`+`) for the lender and expense (`-`) for the borrower upon verified settlement.
-* **Architecture**: Detailed plan artifact in [friend-lending-plan.md](file:///C:/Users/HYPE%20AMD/.gemini/antigravity/brain/41aa6424-0b8e-4fb6-8065-549a6d5965b6/friend-lending-plan.md).
-* **Confirmed Decisions**:
-  1. **Two-Party Agreement**: Loan creation requires acceptance by the second friend before becoming `active`.
-  2. **Repayment-Triggered Ledger**: No transactions are posted at loan creation; transactions are posted strictly upon repayment confirmation.
-  3. **Full Settlement Only**: Entire debt is settled in one event.
-  4. **Atomic Dual-Ledger Sync**: When verified by the lender, post `+` income to lender and `-` expense to borrower via `ConvertTransactionAmount`.
 
 ### Feature: Monthly Balance Rollover
 * **Objective**: Add a recurring monthly allowance system with automatic rollover of unused balances into the next billing cycle.
