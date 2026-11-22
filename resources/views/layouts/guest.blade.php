@@ -21,6 +21,9 @@
             }
         </style>
 
+        <!-- Telegram WebApp SDK -->
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>

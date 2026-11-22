@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateTransactionRequest;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\CategoryService;
+use App\Services\Telegram\TelegramBudgetAlertService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -157,8 +158,11 @@ class TransactionController extends Controller
     /**
      * Store a newly created transaction.
      */
-    public function store(StoreTransactionRequest $request, ConvertTransactionAmount $convert): RedirectResponse
-    {
+    public function store(
+        StoreTransactionRequest $request,
+        ConvertTransactionAmount $convert,
+        TelegramBudgetAlertService $budgetAlerts,
+    ): RedirectResponse {
         $validated = $request->validated();
         $splits = $validated['splits'] ?? null;
         unset($validated['splits']);
@@ -174,6 +178,8 @@ class TransactionController extends Controller
         if (! empty($splits)) {
             $this->syncSplits($transaction, $splits);
         }
+
+        $budgetAlerts->checkForTransaction($transaction);
 
         return redirect()
             ->route('transactions.index')

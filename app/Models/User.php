@@ -15,7 +15,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 
-#[Fillable(['name', 'email', 'password', 'prefers_base_currency', 'currency'])]
+#[Fillable(['name', 'email', 'password', 'prefers_base_currency', 'currency', 'telegram_chat_id', 'telegram_username', 'telegram_link_token', 'telegram_link_token_expires_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -46,6 +46,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'prefers_base_currency' => 'boolean',
+            'telegram_link_token_expires_at' => 'datetime',
         ];
     }
 
@@ -203,5 +204,41 @@ class User extends Authenticatable
     public function debtsAsBorrower(): HasMany
     {
         return $this->hasMany(Debt::class, 'borrower_id');
+    }
+
+    /**
+     * Determine if user has connected their Telegram account.
+     */
+    public function isTelegramLinked(): bool
+    {
+        return ! empty($this->telegram_chat_id);
+    }
+
+    /**
+     * Generate a one-time link token expiring in 15 minutes.
+     */
+    public function generateTelegramLinkToken(): string
+    {
+        $token = bin2hex(random_bytes(16));
+
+        $this->update([
+            'telegram_link_token' => $token,
+            'telegram_link_token_expires_at' => now()->addMinutes(15),
+        ]);
+
+        return $token;
+    }
+
+    /**
+     * Unlink the user's Telegram account.
+     */
+    public function unlinkTelegram(): void
+    {
+        $this->update([
+            'telegram_chat_id' => null,
+            'telegram_username' => null,
+            'telegram_link_token' => null,
+            'telegram_link_token_expires_at' => null,
+        ]);
     }
 }

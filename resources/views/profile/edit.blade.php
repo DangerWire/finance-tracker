@@ -18,6 +18,12 @@
 
             <div class="sure-card p-6 sm:p-8 rounded-2xl border border-white/[0.07] bg-[#0c0d12]/90 shadow-xl backdrop-blur-md">
                 <div class="max-w-2xl">
+                    @include('profile.partials.update-telegram-card')
+                </div>
+            </div>
+
+            <div class="sure-card p-6 sm:p-8 rounded-2xl border border-white/[0.07] bg-[#0c0d12]/90 shadow-xl backdrop-blur-md">
+                <div class="max-w-2xl">
                     @include('profile.partials.update-password-form')
                 </div>
             </div>
