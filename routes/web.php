@@ -1,13 +1,18 @@
 <?php
 
 use App\Http\Controllers\BudgetController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DebtController;
 use App\Http\Controllers\FriendshipController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RecurringTransactionController;
 use App\Http\Controllers\SpendingInsightController;
+use App\Http\Controllers\TelegramLinkController;
+use App\Http\Controllers\TelegramMiniAppAuthController;
+use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\TransactionExportController;
 use App\Http\Controllers\TransactionImportController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,9 +24,9 @@ Route::put('/locale/{locale}', [LocaleController::class, 'update'])
     ->whereIn('locale', ['en', 'id'])
     ->name('locale.update');
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     // Registered before the resource so that the literal /transactions/import
@@ -38,6 +43,11 @@ Route::middleware('auth')->group(function () {
         ->name('transaction-imports.store');
     Route::delete('/transactions/imports/{import}', [TransactionImportController::class, 'destroy'])
         ->name('transaction-imports.destroy');
+
+    Route::get('/transactions/export/csv', [TransactionExportController::class, 'csv'])
+        ->name('transactions.export.csv');
+    Route::get('/transactions/export/statement', [TransactionExportController::class, 'statement'])
+        ->name('transactions.export.statement');
 
     // Serves the calendar fragment for month navigation. Registered before the
     // resource, or /transactions/{transaction} captures it as an id and the
@@ -72,6 +82,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    Route::post('/profile/telegram/link', [TelegramLinkController::class, 'link'])->name('profile.telegram.link');
+    Route::delete('/profile/telegram/unlink', [TelegramLinkController::class, 'unlink'])->name('profile.telegram.unlink');
 });
+
+Route::post('/api/telegram/webhook', TelegramWebhookController::class)->name('telegram.webhook');
+Route::post('/telegram/mini-app-auth', [TelegramMiniAppAuthController::class, 'authenticate'])->name('telegram.mini-app.auth');
 
 require __DIR__.'/auth.php';
