@@ -290,6 +290,154 @@ class TransactionImportTest extends TestCase
             ->assertDontSee('theirs.csv');
     }
 
+    public function test_real_chinese_gb18030_and_indonesian_bank_exports_map_and_import_cleanly(): void
+    {
+        config(['finance.base_currency' => 'CNY']);
+
+        $user = User::factory()->create(['currency' => 'CNY']);
+
+        // 1. GB18030 Alipay-style CSV with long preamble
+        $alipayUtf8 = implode("\r\n", [
+            'Alipay Statement',
+            'Account: alice@example.com',
+            '------------------------------',
+            '交易时间,交易分类,收/支,金额,商品说明',
+            '2026-10-05 12:15:00,餐饮美食,支出,42.00,午餐',
+            '2026-10-06 09:00:00,工资,收入,3000.00,月薪',
+        ]);
+        $alipayGb = mb_convert_encoding($alipayUtf8, 'GB18030', 'UTF-8');
+
+        $preview1 = $this->actingAs($user)->post(
+            route('transaction-imports.preview'),
+            ['file' => $this->csv($alipayGb)],
+        )->assertOk()
+            ->assertJsonPath('valid_count', 2)
+            ->assertJsonPath('mapping.date', '交易时间')
+            ->assertJsonPath('mapping.amount', '金额')
+            ->assertJsonPath('mapping.type', '收/支')
+            ->assertJsonPath('mapping.note', '商品说明');
+
+        $this->actingAs($user)
+            ->post(route('transaction-imports.store'), ['upload_key' => $preview1->json('upload_key')])
+            ->assertRedirect(route('transactions.index'));
+
+        $this->assertDatabaseHas('transactions', [
+            'user_id' => $user->id,
+            'type' => TransactionType::Expense->value,
+            'amount' => 42.00,
+            'note' => '午餐',
+        ]);
+
+        // 2. Indonesian bank export (d-m-Y + debet/kredit)
+        $indoCsv = "Tanggal,Kategori,Jenis,Nominal,Keterangan\n15-10-2026,Makan,Debet,25.00,Nasi Goreng\n16-10-2026,Gaji,Kredit,500.00,Bonus\n";
+
+        $preview2 = $this->actingAs($user)->post(
+            route('transaction-imports.preview'),
+            ['file' => $this->csv($indoCsv)],
+        )->assertOk()
+            ->assertJsonPath('valid_count', 2)
+            ->assertJsonPath('mapping.date', 'Tanggal')
+            ->assertJsonPath('mapping.amount', 'Nominal')
+            ->assertJsonPath('mapping.note', 'Keterangan');
+
+        $this->actingAs($user)
+            ->post(route('transaction-imports.remap'), [
+                'upload_key' => $preview2->json('upload_key'),
+                'mapping' => [
+                    'date' => 'Tanggal',
+                    'amount' => 'Nominal',
+                    'type' => 'Jenis',
+                    'category' => 'Kategori',
+                    'note' => 'Keterangan',
+                ],
+                'signed_amount' => 'no',
+            ])->assertOk()
+            ->assertJsonPath('valid_count', 2);
+
+        $this->actingAs($user)
+            ->post(route('transaction-imports.store'), ['upload_key' => $preview2->json('upload_key')])
+            ->assertRedirect(route('transactions.index'));
+
+        $this->assertDatabaseHas('transactions', [
+            'user_id' => $user->id,
+            'type' => TransactionType::Expense->value,
+            'amount' => 25.00,
+            'note' => 'Nasi Goreng',
+        ]);
+        $this->assertDatabaseHas('transactions', [
+            'user_id' => $user->id,
+            'type' => TransactionType::Income->value,
+            'amount' => 500.00,
+            'note' => 'Bonus',
+        ]);
+    }
+
+    public function test_duplicate_detection_flags_and_skips_by_default_and_allows_explicit_override(): void
+    {
+        config(['finance.base_currency' => 'CNY']);
+
+        $user = User::factory()->create(['currency' => 'CNY']);
+
+        // Import first batch cleanly
+        $csv = "Date,Amount,Type,Note\n2026-10-01,25.00,expense,Lunch\n2026-10-02,900.00,income,Salary\n";
+        $key1 = $this->preview($user, $csv);
+        $this->actingAs($user)->post(route('transaction-imports.store'), ['upload_key' => $key1]);
+        $this->assertSame(2, $user->transactions()->count());
+
+        // Second upload contains one duplicate ("Lunch") and one new entry ("Coffee")
+        $csvWithDuplicate = "Date,Amount,Type,Note\n2026-10-01,25.00,expense,Lunch\n2026-10-03,18.00,expense,Coffee\n";
+        $preview = $this->actingAs($user)->post(
+            route('transaction-imports.preview'),
+            ['file' => $this->csv($csvWithDuplicate)],
+        )->assertOk()
+            ->assertJsonPath('valid_count', 1)
+            ->assertJsonPath('duplicate_count', 1);
+
+        // Default store skips duplicates -> only Coffee added (total 3)
+        $this->actingAs($user)
+            ->post(route('transaction-imports.store'), [
+                'upload_key' => $preview->json('upload_key'),
+            ])
+            ->assertRedirect(route('transactions.index'));
+
+        $this->assertSame(3, $user->transactions()->count());
+
+        // Explicit skip_duplicates=0 imports even matching duplicate row
+        $preview2 = $this->actingAs($user)->post(
+            route('transaction-imports.preview'),
+            ['file' => $this->csv("Date,Amount,Type,Note\n2026-10-01,25.00,expense,Lunch\n")],
+        )->assertOk()
+            ->assertJsonPath('valid_count', 0)
+            ->assertJsonPath('duplicate_count', 1);
+
+        $this->actingAs($user)
+            ->post(route('transaction-imports.store'), [
+                'upload_key' => $preview2->json('upload_key'),
+                'skip_duplicates' => '0',
+            ])
+            ->assertRedirect(route('transactions.index'));
+
+        $this->assertSame(4, $user->transactions()->count());
+    }
+
+    public function test_prune_stale_imports_command_removes_old_staged_files_and_keeps_fresh_ones(): void
+    {
+        Storage::fake('local');
+
+        Storage::disk('local')->put('imports/stale.json', '{}');
+        Storage::disk('local')->put('imports/fresh.json', '{}');
+
+        touch(Storage::disk('local')->path('imports/stale.json'), now()->subHours(26)->getTimestamp());
+        touch(Storage::disk('local')->path('imports/fresh.json'), now()->subHours(2)->getTimestamp());
+
+        $this->artisan('finance:prune-stale-imports', ['--hours' => 24])
+            ->expectsOutputToContain('Pruned 1 stale import file(s)')
+            ->assertExitCode(0);
+
+        Storage::disk('local')->assertMissing('imports/stale.json');
+        Storage::disk('local')->assertExists('imports/fresh.json');
+    }
+
     /**
      * Upload a file and return the staging key the response handed back.
      */

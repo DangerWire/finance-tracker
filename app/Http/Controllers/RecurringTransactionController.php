@@ -43,7 +43,7 @@ class RecurringTransactionController extends Controller
     {
         return view('recurring.create', [
             'recurring' => new RecurringTransaction([
-                'currency' => (string) config('finance.base_currency'),
+                'currency' => (string) ($request->user()->currency ?? config('finance.base_currency')),
                 'type' => TransactionType::Expense,
                 'frequency' => RecurringFrequency::Monthly,
                 'auto_post' => true,

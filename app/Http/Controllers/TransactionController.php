@@ -9,6 +9,7 @@ use App\Http\Requests\UpdateTransactionRequest;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\CategoryService;
+use App\Services\Telegram\TelegramBudgetAlertService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -42,7 +43,7 @@ class TransactionController extends Controller
         $grouped = ($filters['group'] ?? '1') === '1';
         [$from, $to] = $this->periodFrom($filters);
 
-        $baseCurrency = strtoupper((string) config('finance.base_currency'));
+        $baseCurrency = strtoupper((string) ($request->user()->currency ?? config('finance.base_currency')));
 
         $days = null;
         $groups = collect();
@@ -148,7 +149,7 @@ class TransactionController extends Controller
     public function create(Request $request, CategoryService $categories): View
     {
         return view('transactions.create', [
-            'transaction' => new Transaction(['currency' => 'CNY', 'type' => TransactionType::Expense]),
+            'transaction' => new Transaction(['currency' => $request->user()->currency, 'type' => TransactionType::Expense]),
             'types' => TransactionType::cases(),
             'categories' => $categories->forUser($request->user()->id),
         ]);
@@ -157,8 +158,11 @@ class TransactionController extends Controller
     /**
      * Store a newly created transaction.
      */
-    public function store(StoreTransactionRequest $request, ConvertTransactionAmount $convert): RedirectResponse
-    {
+    public function store(
+        StoreTransactionRequest $request,
+        ConvertTransactionAmount $convert,
+        TelegramBudgetAlertService $budgetAlerts,
+    ): RedirectResponse {
         $validated = $request->validated();
         $splits = $validated['splits'] ?? null;
         unset($validated['splits']);
@@ -167,13 +171,15 @@ class TransactionController extends Controller
             $validated['category'] = 'Split';
         }
 
-        $attributes = $convert->apply($validated);
+        $attributes = $convert->apply($validated, $request->user()->currency);
 
         $transaction = $request->user()->transactions()->create($attributes);
 
         if (! empty($splits)) {
             $this->syncSplits($transaction, $splits);
         }
+
+        $budgetAlerts->checkForTransaction($transaction);
 
         return redirect()
             ->route('transactions.index')
@@ -227,7 +233,7 @@ class TransactionController extends Controller
 
         // Re-derive the base snapshot so an edited amount, currency, or date
         // cannot leave the converted total stale.
-        $transaction->fill($convert->apply($validated));
+        $transaction->fill($convert->apply($validated, $request->user()->currency));
 
         $transaction->save();
 

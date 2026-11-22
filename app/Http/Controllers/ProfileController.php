@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\ConvertTransactionAmount;
 use App\Http\Requests\ProfileUpdateRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,21 +19,41 @@ class ProfileController extends Controller
     {
         return view('profile.edit', [
             'user' => $request->user(),
+            'currencies' => config('finance.supported_currencies', []),
         ]);
     }
 
     /**
      * Update the user's profile information.
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(ProfileUpdateRequest $request, ConvertTransactionAmount $convert): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $validated = $request->validated();
+        $oldCurrency = $user->currency;
+        $newCurrency = strtoupper((string) $validated['currency']);
+        $recalculate = (bool) ($validated['recalculate_existing'] ?? true);
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $user->fill([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'currency' => $newCurrency,
+        ]);
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $user->save();
+
+        if ($recalculate && $oldCurrency !== $newCurrency) {
+            $user->transactions()->chunk(100, function ($transactions) use ($convert, $newCurrency) {
+                foreach ($transactions as $transaction) {
+                    $convert->recalculate($transaction, $newCurrency);
+                    $transaction->save();
+                }
+            });
+        }
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }

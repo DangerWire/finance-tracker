@@ -23,9 +23,9 @@ class ConvertTransactionAmount
      * @param  array<string, mixed>  $attributes
      * @return array<string, mixed>
      */
-    public function apply(array $attributes): array
+    public function apply(array $attributes, ?string $targetBaseCurrency = null): array
     {
-        $baseCurrency = config('finance.base_currency');
+        $baseCurrency = $targetBaseCurrency ?: config('finance.base_currency');
         $amount = (float) $attributes['amount'];
         $occurredAt = CarbonImmutable::parse($attributes['occurred_at']);
 
@@ -59,13 +59,13 @@ class ConvertTransactionAmount
     /**
      * Recompute the base snapshot for an existing transaction.
      */
-    public function recalculate(Transaction $transaction): Transaction
+    public function recalculate(Transaction $transaction, ?string $targetBaseCurrency = null): Transaction
     {
         $transaction->fill($this->apply($transaction->only([
             'amount',
             'currency',
             'occurred_at',
-        ])));
+        ]), $targetBaseCurrency));
 
         return $transaction;
     }

@@ -23,6 +23,17 @@ class BudgetFactory extends Factory
             'category' => fake()->randomElement(['Groceries', 'Dining Out', 'Utilities', 'Transportation', 'Entertainment']),
             'amount' => fake()->randomFloat(2, 200, 5000),
             'period_month' => now()->format('Y-m'),
+            'is_recurring' => false,
         ];
+    }
+
+    /**
+     * Mark this budget as repeating automatically every month.
+     */
+    public function recurring(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_recurring' => true,
+        ]);
     }
 }

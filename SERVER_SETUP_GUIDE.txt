@@ -1,0 +1,299 @@
+================================================================================
+LAPTOP SELF-HOSTED SERVER SETUP GUIDE (FINANCE TRACKER + POSTGRESQL)
+================================================================================
+
+This guide walks you through turning any standard laptop into a dedicated 24/7
+server hosting the Laravel Finance Tracker web application and PostgreSQL database.
+
+Laptops make great budget servers because:
+ - Low power consumption (10W - 35W)
+ - Built-in UPS / battery backup during brief power flickers
+ - Compact, silent, and easy to place near your home router
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. Laptop Hardware & Power Settings
+2. Setting Up PostgreSQL Database
+3. Option A: Ubuntu / Debian Linux Setup (Recommended)
+4. Option B: Windows (Laragon) Setup
+5. Application Deployment & Environment
+6. Background Services (Queue Worker & Cron Scheduler)
+7. Nginx Web Server Configuration
+8. Accessing from Devices (Local Network & Cloudflare Tunnel)
+9. Quick Maintenance & Troubleshooting Commands
+
+================================================================================
+1. LAPTOP HARDWARE & POWER SETTINGS
+================================================================================
+
+To ensure the laptop runs 24/7 with the lid closed and connected to your network:
+
+A. PREVENT SLEEP ON LID CLOSE:
+   - On Windows:
+     1. Open Control Panel > Power Options.
+     2. Click "Choose what closing the lid does" on the left sidebar.
+     3. For both "On battery" and "Plugged in", change "When I close the lid"
+        to "Do nothing".
+     4. Save changes.
+
+   - On Ubuntu / Linux:
+     1. Edit the systemd login configuration:
+        sudo nano /etc/systemd/logind.conf
+     2. Uncomment or set these values:
+        HandleLidSwitch=ignore
+        HandleLidSwitchExternalPower=ignore
+     3. Restart the service:
+        sudo systemctl restart systemd-logind
+
+B. ASSIGN A STATIC IP ADDRESS (LAN):
+   - In your home Wi-Fi / router admin page (usually 192.168.1.1 or 192.168.0.1):
+     Go to "DHCP IP Reservation" and bind your laptop's MAC address to a fixed
+     IP address (for example: 192.168.1.150).
+   - Alternatively, plug into Ethernet for the most reliable connection.
+
+================================================================================
+2. SETTING UP POSTGRESQL DATABASE
+================================================================================
+
+The application is configured to use PostgreSQL.
+
+A. INSTALL POSTGRESQL (LINUX):
+   sudo apt update
+   sudo apt install -y postgresql postgresql-contrib
+   sudo systemctl enable --now postgresql
+
+B. CREATE DATABASE AND USER:
+   Log into the PostgreSQL superuser shell:
+   sudo -u postgres psql
+
+   Execute the following SQL commands:
+   ----------------------------------------------------------------
+   CREATE DATABASE finance_tracker;
+   CREATE USER finance_app WITH ENCRYPTED PASSWORD 'replace_with_your_password';
+   GRANT ALL PRIVILEGES ON DATABASE finance_tracker TO finance_app;
+   ALTER DATABASE finance_tracker OWNER TO finance_app;
+   \q
+   ----------------------------------------------------------------
+
+================================================================================
+3. OPTION A: UBUNTU / DEBIAN LINUX SETUP (RECOMMENDED)
+================================================================================
+
+If running a clean Linux server on the laptop:
+
+A. INSTALL PHP 8.3 & REQUIRED EXTENSIONS:
+   sudo apt update && sudo apt install -y software-properties-common curl git unzip
+   sudo add-apt-repository ppa:ondrej/php -y
+   sudo apt update
+   sudo apt install -y php8.3-fpm php8.3-cli php8.3-pgsql php8.3-mbstring \
+       php8.3-xml php8.3-curl php8.3-zip php8.3-bcmath php8.3-tokenizer \
+       nginx
+
+B. INSTALL COMPOSER (PHP Package Manager):
+   curl -sS https://getcomposer.org/installer | sudo php -- --install-dir=/usr/local/bin --filename=composer
+
+C. INSTALL NODE.JS 20+ & NPM:
+   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+   sudo apt install -y nodejs
+
+================================================================================
+4. OPTION B: WINDOWS (LARAGON) SETUP
+================================================================================
+
+If you choose to keep Windows on the laptop:
+
+1. Download and install Laragon Full from: https://laragon.org
+2. In Laragon:
+   - Go to Menu > Quick app > Configuration / Tools > PostgreSQL.
+   - Start All services (Apache/Nginx & PostgreSQL).
+   - Ensure PHP version is 8.3 or newer (Preferences > PHP).
+   - Check that extension "pdo_pgsql" is checked in Menu > PHP > Quick Settings.
+3. Install Git and Node.js for Windows if not already installed.
+
+================================================================================
+5. APPLICATION DEPLOYMENT & ENVIRONMENT
+================================================================================
+
+1. CLONE OR COPY CODE TO SERVER:
+   # Linux path:
+   cd /var/www
+   git clone <YOUR-REPOSITORY-URL> finance-tracker
+   cd /var/www/finance-tracker
+
+   # Or on Windows Laragon:
+   # Place into C:\laragon\www\finance-tracker
+
+2. CONFIGURE ENVIRONMENT (.env):
+   cp .env.example .env
+
+   Open .env and configure these key variables:
+   ----------------------------------------------------------------
+   APP_NAME="Finance Tracker"
+   APP_ENV=production
+   APP_DEBUG=false
+   APP_URL=http://192.168.1.150   # Use your laptop's static IP or domain
+
+   DB_CONNECTION=pgsql
+   DB_HOST=127.0.0.1
+   DB_PORT=5432
+   DB_DATABASE=finance_tracker
+   DB_USERNAME=finance_app
+   DB_PASSWORD=replace_with_your_password
+
+   QUEUE_CONNECTION=database
+   ----------------------------------------------------------------
+
+3. INSTALL DEPENDENCIES & BUILD ASSETS:
+   # Install PHP packages:
+   composer install --no-dev --optimize-autoloader
+
+   # Generate app encryption key:
+   php artisan key:generate
+
+   # Run database migrations:
+   php artisan migrate --force
+
+   # Build frontend assets (Vite / Tailwind / GSAP):
+   npm install
+   npm run build
+
+4. SET PERMISSIONS (LINUX):
+   sudo chown -R www-data:www-data /var/www/finance-tracker/storage /var/www/finance-tracker/bootstrap/cache
+   sudo chmod -R 775 /var/www/finance-tracker/storage /var/www/finance-tracker/bootstrap/cache
+
+5. CACHE CONFIGURATION FOR HIGH PERFORMANCE:
+   php artisan config:cache
+   php artisan route:cache
+   php artisan view:cache
+
+================================================================================
+6. BACKGROUND SERVICES (QUEUE WORKER & CRON SCHEDULER)
+================================================================================
+
+The app uses queues for AI insight generation and a scheduler for recurring bills.
+
+A. CRON JOB (SCHEDULER):
+   Run the crontab editor for the web server user:
+   sudo crontab -e -u www-data
+
+   Add this single line to run the scheduler every minute:
+   * * * * * php /var/www/finance-tracker/artisan schedule:run >> /dev/null 2>&1
+
+B. QUEUE WORKER (SYSTEMD SERVICE):
+   Create a systemd unit file:
+   sudo nano /etc/systemd/system/finance-worker.service
+
+   Paste the following:
+   ----------------------------------------------------------------
+   [Unit]
+   Description=Finance Tracker Queue Worker
+   After=network.target
+
+   [Service]
+   User=www-data
+   Group=www-data
+   Restart=always
+   ExecStart=/usr/bin/php /var/www/finance-tracker/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+
+   [Install]
+   WantedBy=multi-user.target
+   ----------------------------------------------------------------
+
+   Enable and start the service:
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now finance-worker
+
+================================================================================
+7. NGINX WEB SERVER CONFIGURATION (LINUX)
+================================================================================
+
+Create a new site configuration:
+sudo nano /etc/nginx/sites-available/finance-tracker
+
+Paste the following:
+----------------------------------------------------------------
+server {
+    listen 80;
+    server_name 192.168.1.150; # Replace with your laptop IP or domain
+    root /var/www/finance-tracker/public;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+
+    index index.php;
+    charset utf-8;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_hide_header X-Powered-By;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
+----------------------------------------------------------------
+
+Enable the site and reload Nginx:
+sudo ln -s /etc/nginx/sites-available/finance-tracker /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+
+================================================================================
+8. ACCESSING FROM DEVICES
+================================================================================
+
+A. ON YOUR HOME WI-FI / LOCAL NETWORK:
+   Any phone, tablet, or PC connected to your home router can access the site by
+   opening the laptop's IP in a browser:
+   http://192.168.1.150
+
+B. OUTSIDE YOUR HOME (FREE & SECURE ACCESS):
+   You do NOT need port forwarding or a static public IP. Use one of these:
+
+   Option 1: Cloudflare Tunnel (Zero Trust) - Best for Public Access
+   - Free tool by Cloudflare.
+   - Connects your local port 80 to your own custom domain (e.g., finance.yourdomain.com).
+   - Provides free automatic SSL (HTTPS), DDoS protection, and firewall.
+   - Quick install:
+     curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+     sudo dpkg -i cloudflared.deb
+     cloudflared tunnel login
+
+   Option 2: Tailscale - Best for Private Personal Access
+   - Creates a private, encrypted WireGuard VPN between your laptop, phone, and PC.
+   - Install Tailscale on the laptop and your phone.
+   - Access the site securely from anywhere using your private Tailscale IP.
+
+================================================================================
+9. QUICK MAINTENANCE & TROUBLESHOOTING COMMANDS
+================================================================================
+
+- Check Queue Worker status:
+  sudo systemctl status finance-worker
+
+- Restart Queue Worker:
+  sudo systemctl restart finance-worker
+
+- Check Nginx error logs:
+  sudo tail -f /var/log/nginx/error.log
+
+- Check Laravel application logs:
+  tail -f /var/www/finance-tracker/storage/logs/laravel.log
+
+- Clear Laravel caches after code updates:
+  php artisan optimize:clear
+  php artisan optimize
+================================================================================

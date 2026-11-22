@@ -1,11 +1,15 @@
 @props(['active'])
 
 @php
-$classes = ($active ?? false)
-            ? 'block w-full ps-3 pe-4 py-2 border-l-4 border-indigo-400 text-start text-base font-medium text-indigo-700 bg-indigo-50 focus:outline-none focus:text-indigo-800 focus:bg-indigo-100 focus:border-indigo-700 transition duration-150 ease-in-out'
-            : 'block w-full ps-3 pe-4 py-2 border-l-4 border-transparent text-start text-base font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:text-gray-800 focus:bg-gray-50 focus:border-gray-300 transition duration-150 ease-in-out';
+$isActive = (bool) ($active ?? false);
+$classes = $isActive
+            ? 'flex items-center justify-between w-full px-3 py-2 rounded-lg text-start text-sm font-medium text-white bg-white/[0.08] border border-white/[0.08] transition duration-150 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70'
+            : 'flex items-center justify-between w-full px-3 py-2 rounded-lg text-start text-sm font-medium text-zinc-400 border border-transparent hover:text-zinc-100 hover:bg-white/[0.04] transition duration-150 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70';
 @endphp
 
-<a {{ $attributes->merge(['class' => $classes]) }}>
-    {{ $slot }}
+<a {{ $attributes->merge(['class' => $classes, 'aria-current' => $isActive ? 'page' : null]) }}>
+    <span>{{ $slot }}</span>
+    @if ($isActive)
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true"></span>
+    @endif
 </a>

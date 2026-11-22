@@ -40,6 +40,8 @@ class TransactionImportService
         'Y-m-d',
         'Y/m/d H:i:s',
         'Y/m/d',
+        'd-m-Y H:i:s',
+        'd-m-Y',
         'd/m/Y H:i:s',
         'd/m/Y',
         'm/d/Y H:i:s',
@@ -67,12 +69,12 @@ class TransactionImportService
     public function guessMapping(array $headers): array
     {
         $aliases = [
-            'date' => ['date', 'time', 'timestamp', 'transaction date', 'occurred at', '日期', '交易时间', '交易日期'],
-            'amount' => ['amount', 'value', 'sum', 'total', 'money', '金额', '交易金额', '发生额'],
-            'type' => ['type', 'direction', 'kind', 'dr/cr', 'debit/credit', '类型', '收/支', '收支'],
+            'date' => ['date', 'time', 'timestamp', 'transaction date', 'occurred at', 'tanggal', '日期', '交易时间', '交易日期'],
+            'amount' => ['amount', 'value', 'sum', 'total', 'money', 'nominal', 'jumlah', '金额', '交易金额', '发生额'],
+            'type' => ['type', 'direction', 'kind', 'dr/cr', 'debit/credit', 'debet', 'kredit', 'jenis', '类型', '收/支', '收支'],
             'currency' => ['currency', 'ccy', '货币', '币种'],
-            'category' => ['category', 'cat', 'tag', '分类', '类别'],
-            'note' => ['note', 'notes', 'memo', 'description', 'details', 'merchant', '备注', '说明', '交易说明'],
+            'category' => ['category', 'cat', 'tag', 'kategori', '分类', '类别'],
+            'note' => ['note', 'notes', 'memo', 'description', 'details', 'merchant', 'keterangan', '商品说明', '交易对方', '备注', '说明', '交易说明'],
         ];
 
         $mapping = [];
@@ -120,12 +122,17 @@ class TransactionImportService
      *
      * @param  array<int, array<string, string>>  $rows
      * @param  array<string, string|null>  $mapping  field name => header label
-     * @return array{valid: array<int, array<string, mixed>>, invalid: array<int, array{line: int, errors: array<int, string>}>}
+     * @return array{
+     *     valid: array<int, array<string, mixed>>,
+     *     invalid: array<int, array{line: int, errors: array<int, string>}>,
+     *     duplicates: array<int, array{line: int, attributes: array<string, mixed>, reason: string}>
+     * }
      */
-    public function validate(array $rows, array $mapping, string $signedAmount = 'no'): array
+    public function validate(array $rows, array $mapping, string $signedAmount = 'no', ?User $user = null): array
     {
         $valid = [];
         $invalid = [];
+        $duplicates = [];
 
         foreach ($rows as $index => $row) {
             // Line 1 is the header, so data rows start at line 2.
@@ -153,7 +160,80 @@ class TransactionImportService
             $valid[] = ['line' => $line, 'attributes' => $attributes];
         }
 
-        return ['valid' => $valid, 'invalid' => $invalid];
+        if ($user !== null && $valid !== []) {
+            $dates = array_map(
+                fn (array $item): CarbonImmutable => $item['attributes']['occurred_at'] instanceof CarbonImmutable
+                    ? $item['attributes']['occurred_at']
+                    : CarbonImmutable::parse((string) $item['attributes']['occurred_at']),
+                $valid
+            );
+
+            $minOccurredAt = min($dates);
+            $maxOccurredAt = max($dates);
+
+            $existingFingerprints = [];
+            $existingTransactions = $user->transactions()
+                ->whereBetween('occurred_at', [$minOccurredAt, $maxOccurredAt])
+                ->get(['occurred_at', 'type', 'amount', 'currency', 'note']);
+
+            foreach ($existingTransactions as $existing) {
+                $fp = $this->fingerprint(
+                    CarbonImmutable::instance($existing->occurred_at),
+                    $existing->type,
+                    $existing->amount,
+                    (string) $existing->currency,
+                    $existing->note,
+                );
+                $existingFingerprints[$fp] = true;
+            }
+
+            if ($existingFingerprints !== []) {
+                $uniqueValid = [];
+                foreach ($valid as $entry) {
+                    $attrs = $entry['attributes'];
+                    $fp = $this->fingerprint(
+                        $attrs['occurred_at'],
+                        $attrs['type'],
+                        $attrs['amount'],
+                        (string) $attrs['currency'],
+                        $attrs['note'] ?? null,
+                    );
+
+                    if (isset($existingFingerprints[$fp])) {
+                        $duplicates[] = [
+                            'line' => $entry['line'],
+                            'attributes' => $attrs,
+                            'reason' => 'Matches an existing transaction on the same date, amount, and note.',
+                        ];
+                    } else {
+                        $uniqueValid[] = $entry;
+                    }
+                }
+                $valid = $uniqueValid;
+            }
+        }
+
+        return ['valid' => $valid, 'invalid' => $invalid, 'duplicates' => $duplicates];
+    }
+
+    /**
+     * Build a deterministic duplicate-detection fingerprint for a transaction row.
+     */
+    private function fingerprint(
+        CarbonImmutable|string $occurredAt,
+        TransactionType|string $type,
+        float|int|string $amount,
+        string $currency,
+        ?string $note,
+    ): string {
+        $dt = $occurredAt instanceof CarbonImmutable ? $occurredAt : CarbonImmutable::parse($occurredAt);
+        $typeValue = $type instanceof TransactionType ? $type->value : (string) $type;
+
+        return $dt->format('Y-m-d H:i:s')
+            .'|'.$typeValue
+            .'|'.number_format((float) $amount, 2, '.', '')
+            .'|'.strtoupper(trim($currency))
+            .'|'.mb_strtolower(trim((string) ($note ?? '')));
     }
 
     /**
@@ -173,7 +253,7 @@ class TransactionImportService
             $user->transactions()->create([
                 ...$row,
                 'import_id' => $batch->id,
-                ...$this->convert->apply($row),
+                ...$this->convert->apply($row, $user->currency),
             ]);
         }
 
@@ -379,11 +459,11 @@ class TransactionImportService
         $typeCell = $this->cell($row, $mapping, 'type');
 
         if ($typeCell !== null) {
-            $normalized = strtolower($typeCell);
+            $normalized = mb_strtolower($typeCell);
 
             return match (true) {
-                in_array($normalized, ['income', 'in', 'credit', 'received', 'revenue'], true) => TransactionType::Income,
-                in_array($normalized, ['expense', 'ex', 'debit', 'spent', 'payment'], true) => TransactionType::Expense,
+                in_array($normalized, ['income', 'in', 'credit', 'cr', 'kredit', 'received', 'revenue', 'masuk', 'pemasukan', '收入'], true) => TransactionType::Income,
+                in_array($normalized, ['expense', 'ex', 'debit', 'db', 'debet', 'spent', 'payment', 'keluar', 'pengeluaran', '支出'], true) => TransactionType::Expense,
                 default => null,
             };
         }

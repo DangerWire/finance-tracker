@@ -380,6 +380,32 @@ class RecurringTransactionTest extends TestCase
         $this->assertDatabaseCount('transactions', 0);
     }
 
+    public function test_run_now_endpoint_triggers_generation_and_redirects(): void
+    {
+        $user = User::factory()->create();
+
+        RecurringTransaction::factory()->for($user)->create([
+            'starts_on' => CarbonImmutable::now()->subDays(5)->toDateString(),
+            'next_occurrence_on' => CarbonImmutable::now()->subDays(1)->toDateString(),
+        ]);
+
+        $response = $this->actingAs($user)->post(route('recurring.run'));
+
+        $response->assertRedirect(route('recurring.index'));
+        $response->assertSessionHas('status', 'Posted 1 transaction.');
+        $this->assertDatabaseCount('transactions', 1);
+    }
+
+    public function test_run_now_button_is_rendered_as_submit_button(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('recurring.index'));
+
+        $response->assertOk();
+        $response->assertSee('type="submit"', false);
+    }
+
     /**
      * Write one occurrence directly, bypassing the runner's existence check.
      */

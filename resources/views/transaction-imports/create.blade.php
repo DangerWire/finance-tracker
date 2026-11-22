@@ -105,6 +105,16 @@
                     </div>`
                     : '';
 
+                const duplicatesWarning = data.duplicate_count > 0
+                    ? `<div class="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-lg px-4 py-3">
+                        <p class="font-medium">{{ __('Duplicates detected:') }} ${data.duplicate_count}</p>
+                        <ul class="mt-2 list-disc pl-5 space-y-1">
+                            ${data.duplicates.map((row) => `<li>{{ __('Line') }} ${row.line}: ${row.attributes.occurred_at} — ${row.attributes.amount} ${row.attributes.currency} (${row.reason})</li>`).join('')}
+                        </ul>
+                        ${data.duplicate_count > data.duplicates.length ? `<p class="mt-2">… ${data.duplicate_count - data.duplicates.length} {{ __('more') }}</p>` : ''}
+                    </div>`
+                    : '';
+
                 const rows = data.preview.map((row) => {
                     const a = row.attributes;
 
@@ -119,6 +129,7 @@
 
                 result.innerHTML = `
                     ${problems}
+                    ${duplicatesWarning}
                     <div class="bg-white p-6 shadow-sm sm:rounded-lg space-y-4">
                         <p class="text-sm text-gray-700">
                             <strong>${data.filename}</strong> &mdash;
@@ -132,7 +143,7 @@
                         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">${selects}</div>
 
                         <label class="flex items-start gap-2 text-sm text-gray-700">
-                            <input type="checkbox" id="signed" class="signed rounded border-gray-300 text-indigo-600 mt-0.5">
+                            <input type="checkbox" id="signed" class="signed rounded border-gray-300 text-emerald-600 mt-0.5">
                             <span>
                                 {{ __('One amount column') }}
                                 <span class="block text-xs text-gray-500">
@@ -141,18 +152,25 @@
                             </span>
                         </label>
 
-                        <div class="flex items-center gap-4">
-                            <button type="button" id="remap" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-700 border border-gray-300 hover:bg-gray-50">
-                                {{ __('Re-check mapping') }}
-                            </button>
-                            <form method="POST" action="${storeUrl}" class="inline">
-                                <input type="hidden" name="_token" value="${csrf}">
-                                <input type="hidden" name="upload_key" value="${data.upload_key}">
+                        <form method="POST" action="${storeUrl}" class="space-y-4">
+                            <input type="hidden" name="_token" value="${csrf}">
+                            <input type="hidden" name="upload_key" value="${data.upload_key}">
+
+                            <label class="flex items-start gap-2 text-sm text-gray-700">
+                                <input type="hidden" name="skip_duplicates" value="0">
+                                <input type="checkbox" name="skip_duplicates" value="1" checked class="rounded border-gray-300 text-emerald-600 mt-0.5">
+                                <span>{{ __('Skip duplicate transactions') }}</span>
+                            </label>
+
+                            <div class="flex items-center gap-4">
+                                <button type="button" id="remap" class="rounded-md bg-white px-4 py-2 text-sm font-semibold text-gray-700 border border-gray-300 hover:bg-gray-50">
+                                    {{ __('Re-check mapping') }}
+                                </button>
                                 <button type="submit" class="rounded-md bg-gray-800 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-700">
                                     {{ __('Start import') }}
                                 </button>
-                            </form>
-                        </div>
+                            </div>
+                        </form>
                     </div>
 
                     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">

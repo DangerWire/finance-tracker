@@ -75,7 +75,7 @@ class SpendingInsightService
     public function analyze(array $stats): array
     {
         $response = Prism::structured()
-            ->using(Provider::OpenRouter, config('insights.model'))
+            ->using(Provider::Gemini, config('insights.model'), array_filter(['api_key' => config('insights.api_key')]))
             ->withSchema($this->schema())
             ->withSystemPrompt($this->systemPrompt())
             ->withPrompt($this->buildPrompt($stats))
@@ -162,6 +162,6 @@ class SpendingInsightService
 
         return $exception instanceof RuntimeException && $exception->getMessage() !== ''
             ? $exception->getMessage()
-            : 'The AI provider could not be reached. Check OPENROUTER_API_KEY and try again.';
+            : 'The AI provider could not be reached. Check GEMINI_API_KEY and try again.';
     }
 }

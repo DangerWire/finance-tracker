@@ -33,7 +33,7 @@ class BudgetController extends Controller
             'prevMonth' => $monthDate->subMonthNoOverflow()->format('Y-m'),
             'nextMonth' => $monthDate->addMonthNoOverflow()->format('Y-m'),
             'categories' => $userCategories,
-            'baseCurrency' => strtoupper((string) config('finance.base_currency')),
+            'baseCurrency' => strtoupper((string) ($request->user()->currency ?? config('finance.base_currency'))),
         ]);
     }
 
@@ -71,6 +71,15 @@ class BudgetController extends Controller
         $this->authorizeOwnership($request, $budget);
 
         $periodMonth = $budget->period_month;
+
+        if ($budget->is_recurring) {
+            $request->user()->budgets()
+                ->where('category', $budget->category)
+                ->where('period_month', '<', $periodMonth)
+                ->where('is_recurring', true)
+                ->update(['is_recurring' => false]);
+        }
+
         $budget->delete();
 
         return redirect()

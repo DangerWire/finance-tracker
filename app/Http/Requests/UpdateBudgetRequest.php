@@ -37,6 +37,7 @@ class UpdateBudgetRequest extends FormRequest
             ],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999999.99'],
             'period_month' => ['sometimes', 'required', 'date_format:Y-m'],
+            'is_recurring' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -1,6 +1,8 @@
 <?php
 
+use App\Console\Commands\GenerateRecurringBudgets;
 use App\Console\Commands\GenerateRecurringTransactions;
+use App\Console\Commands\PruneStaleImports;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -24,6 +26,18 @@ Artisan::command('inspire', function () {
 
 Schedule::command(GenerateRecurringTransactions::class)
     ->dailyAt('04:00')
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->runInBackground();
+
+Schedule::command(GenerateRecurringBudgets::class)
+    ->dailyAt('04:10')
+    ->withoutOverlapping()
+    ->onOneServer()
+    ->runInBackground();
+
+Schedule::command(PruneStaleImports::class)
+    ->dailyAt('03:30')
     ->withoutOverlapping()
     ->onOneServer()
     ->runInBackground();

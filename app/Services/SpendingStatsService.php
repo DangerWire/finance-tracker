@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\TransactionType;
 use App\Models\Budget;
 use App\Models\Transaction;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -18,6 +19,10 @@ use Illuminate\Support\Collection;
  */
 class SpendingStatsService
 {
+    public function __construct(
+        private readonly RecurringBudgetService $recurringBudgets,
+    ) {}
+
     /**
      * Number of trailing periods to compare against the current one.
      */
@@ -43,7 +48,8 @@ class SpendingStatsService
     {
         $through ??= CarbonImmutable::now();
 
-        $baseCurrency = strtoupper((string) config('finance.base_currency'));
+        $user = User::find($userId);
+        $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
 
         $totals = $this->monthlyTotals($userId, $through);
         $currentPeriod = $through->format('Y-m');
@@ -319,11 +325,14 @@ class SpendingStatsService
      */
     private function expenseQuery(int $userId): Builder
     {
+        $user = User::find($userId);
+        $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
+
         return Transaction::query()
             ->where('user_id', $userId)
             ->where('type', TransactionType::Expense)
             ->whereNotNull('base_amount')
-            ->where('base_currency', strtoupper((string) config('finance.base_currency')));
+            ->where('base_currency', $baseCurrency);
     }
 
     /**
@@ -356,7 +365,8 @@ class SpendingStatsService
      *         spent_amount: float,
      *         remaining_amount: float,
      *         percentage_used: float,
-     *         status: 'safe'|'warning'|'exceeded'
+     *         status: 'safe'|'warning'|'exceeded',
+     *         is_recurring: bool
      *     }>
      * }
      */
@@ -364,7 +374,10 @@ class SpendingStatsService
     {
         $through ??= CarbonImmutable::now();
         $periodMonth = $through->format('Y-m');
-        $baseCurrency = strtoupper((string) config('finance.base_currency'));
+        $user = User::find($userId);
+        $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
+
+        $this->recurringBudgets->ensureForUserMonth($userId, $periodMonth);
 
         $monthStart = $through->startOfMonth();
         $monthEnd = $through->endOfMonth();
@@ -421,6 +434,7 @@ class SpendingStatsService
                 'remaining_amount' => $remaining,
                 'percentage_used' => $pct,
                 'status' => $status,
+                'is_recurring' => (bool) $budget->is_recurring,
             ];
         }
 

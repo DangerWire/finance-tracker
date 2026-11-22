@@ -755,27 +755,26 @@ class TransactionTest extends TestCase
     }
 
     /**
-     * Assert the filter disclosure is expanded, tolerating Blade's whitespace
-     * between attributes.
+     * Assert the filter modal is open, matching the data-open attribute.
      */
     private function assertPanelIsOpen(string $html): void
     {
         $this->assertMatchesRegularExpression(
-            '#<details id="filter-panel"\s+open#',
+            '#id="filter-modal"[^>]*data-open="true"#',
             $html,
-            'The filter panel should be open.',
+            'The filter modal should be open.',
         );
     }
 
     /**
-     * Assert the filter disclosure is collapsed.
+     * Assert the filter modal is closed, matching the data-open attribute.
      */
     private function assertPanelIsClosed(string $html): void
     {
-        $this->assertDoesNotMatchRegularExpression(
-            '#<details id="filter-panel"\s+open#',
+        $this->assertMatchesRegularExpression(
+            '#id="filter-modal"[^>]*data-open="false"#',
             $html,
-            'The filter panel should be closed.',
+            'The filter modal should be closed.',
         );
     }
 
