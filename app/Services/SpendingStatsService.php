@@ -19,6 +19,10 @@ use Illuminate\Support\Collection;
  */
 class SpendingStatsService
 {
+    public function __construct(
+        private readonly RecurringBudgetService $recurringBudgets,
+    ) {}
+
     /**
      * Number of trailing periods to compare against the current one.
      */
@@ -361,7 +365,8 @@ class SpendingStatsService
      *         spent_amount: float,
      *         remaining_amount: float,
      *         percentage_used: float,
-     *         status: 'safe'|'warning'|'exceeded'
+     *         status: 'safe'|'warning'|'exceeded',
+     *         is_recurring: bool
      *     }>
      * }
      */
@@ -371,6 +376,8 @@ class SpendingStatsService
         $periodMonth = $through->format('Y-m');
         $user = User::find($userId);
         $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
+
+        $this->recurringBudgets->ensureForUserMonth($userId, $periodMonth);
 
         $monthStart = $through->startOfMonth();
         $monthEnd = $through->endOfMonth();
@@ -427,6 +434,7 @@ class SpendingStatsService
                 'remaining_amount' => $remaining,
                 'percentage_used' => $pct,
                 'status' => $status,
+                'is_recurring' => (bool) $budget->is_recurring,
             ];
         }
 

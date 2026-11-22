@@ -71,6 +71,15 @@ class BudgetController extends Controller
         $this->authorizeOwnership($request, $budget);
 
         $periodMonth = $budget->period_month;
+
+        if ($budget->is_recurring) {
+            $request->user()->budgets()
+                ->where('category', $budget->category)
+                ->where('period_month', '<', $periodMonth)
+                ->where('is_recurring', true)
+                ->update(['is_recurring' => false]);
+        }
+
         $budget->delete();
 
         return redirect()

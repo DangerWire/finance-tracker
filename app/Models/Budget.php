@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['category', 'amount', 'period_month'])]
+#[Fillable(['category', 'amount', 'period_month', 'is_recurring'])]
 class Budget extends Model
 {
     /** @use HasFactory<BudgetFactory> */
@@ -24,6 +24,7 @@ class Budget extends Model
     {
         return [
             'amount' => 'float',
+            'is_recurring' => 'boolean',
         ];
     }
 
