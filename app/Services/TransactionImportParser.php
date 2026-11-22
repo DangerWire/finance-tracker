@@ -27,7 +27,7 @@ class TransactionImportParser
      * Lines to skip looking for the header row, so a preamble of account
      * metadata does not get mistaken for the header.
      */
-    private const MAX_PREAMBLE_LINES = 10;
+    private const MAX_PREAMBLE_LINES = 25;
 
     /**
      * Refuse to read a file larger than this, so a mis-selected huge export
@@ -48,11 +48,43 @@ class TransactionImportParser
      */
     public function parse(UploadedFile $file): array
     {
-        $handle = fopen($file->getRealPath(), 'rb');
+        $raw = file_get_contents($file->getRealPath());
+
+        if ($raw === false) {
+            throw new RuntimeException('The uploaded file could not be read.');
+        }
+
+        return $this->parseContent($raw);
+    }
+
+    /**
+     * Parse raw CSV bytes (UTF-8, UTF-8 with BOM, GB18030, CP936, or ISO-8859-1) into headers and keyed rows.
+     *
+     * @return array{headers: array<int, string>, rows: array<int, array<string, string>>}
+     *
+     * @throws RuntimeException when the bytes cannot be read as delimited text
+     */
+    public function parseContent(string $raw): array
+    {
+        // Strip UTF-8 BOM if present, then normalize legacy encodings (GB18030 / CP936 / Windows-1252).
+        if (str_starts_with($raw, "\xEF\xBB\xBF")) {
+            $raw = substr($raw, 3);
+        }
+
+        if (! mb_check_encoding($raw, 'UTF-8')) {
+            $raw = (string) mb_convert_encoding($raw, 'UTF-8', ['GB18030', 'CP936', 'Windows-1252', 'ISO-8859-1']);
+        }
+
+        $raw = str_replace(["\r\n", "\r"], "\n", $raw);
+
+        $handle = fopen('php://temp', 'r+b');
 
         if ($handle === false) {
             throw new RuntimeException('The uploaded file could not be read.');
         }
+
+        fwrite($handle, $raw);
+        rewind($handle);
 
         try {
             $this->rewindToHeader($handle);

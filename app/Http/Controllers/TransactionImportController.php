@@ -70,7 +70,7 @@ class TransactionImportController extends Controller
 
         $signedAmount = (string) $request->input('signed_amount', 'no');
 
-        $result = $this->importer->validate($parsed['rows'], $mapping, $signedAmount);
+        $result = $this->importer->validate($parsed['rows'], $mapping, $signedAmount, $request->user());
 
         $key = $this->stage($request->file('file')->getClientOriginalName(), [
             'headers' => $parsed['headers'],
@@ -103,6 +103,10 @@ class TransactionImportController extends Controller
             'mapping' => ['required', 'array'],
             'mapping.date' => ['required', 'string', 'max:255'],
             'mapping.amount' => ['required', 'string', 'max:255'],
+            'mapping.type' => ['nullable', 'string', 'max:255'],
+            'mapping.currency' => ['nullable', 'string', 'max:255'],
+            'mapping.category' => ['nullable', 'string', 'max:255'],
+            'mapping.note' => ['nullable', 'string', 'max:255'],
             'signed_amount' => ['nullable', 'in:yes,no'],
         ]);
 
@@ -123,6 +127,7 @@ class TransactionImportController extends Controller
             $payload['rows'],
             $mapping,
             (string) $payload['signed_amount'],
+            $request->user(),
         );
 
         return $this->respond(
@@ -136,7 +141,7 @@ class TransactionImportController extends Controller
     }
 
     /**
-     * @param  array{valid: array<int, mixed>, invalid: array<int, mixed>}  $result
+     * @param  array{valid: array<int, mixed>, invalid: array<int, mixed>, duplicates: array<int, mixed>}  $result
      * @param  array<string, mixed>  $mapping
      */
     private function respond(array $result, string $key, string $filename, int $totalRows, array $mapping, array $headers): JsonResponse
@@ -148,7 +153,9 @@ class TransactionImportController extends Controller
             'total_rows' => $totalRows,
             'valid_count' => count($result['valid']),
             'invalid_count' => count($result['invalid']),
+            'duplicate_count' => count($result['duplicates']),
             'invalid' => array_slice($result['invalid'], 0, 50),
+            'duplicates' => array_slice($result['duplicates'], 0, 50),
             'preview' => array_slice($result['valid'], 0, 10),
             'mapping' => $mapping,
         ]);
@@ -161,6 +168,7 @@ class TransactionImportController extends Controller
     {
         $validated = $request->validate([
             'upload_key' => ['required', 'string', 'max:100'],
+            'skip_duplicates' => ['nullable', 'boolean'],
         ]);
 
         $payload = $this->readStaged((string) $validated['upload_key']);
@@ -178,43 +186,62 @@ class TransactionImportController extends Controller
             $payload['rows'],
             $payload['mapping'],
             (string) $payload['signed_amount'],
+            $request->user(),
         );
 
-        if ($result['valid'] === []) {
+        $skipDuplicates = $request->boolean('skip_duplicates', true);
+        $rowsToImport = $result['valid'];
+
+        if (! $skipDuplicates) {
+            $rowsToImport = array_merge($rowsToImport, $result['duplicates']);
+        }
+
+        if ($rowsToImport === []) {
             $this->discard((string) $validated['upload_key']);
 
             return back()->withErrors([
-                'file' => 'No importable rows were found with that column mapping.',
+                'file' => 'No new importable rows were found (all rows were invalid or duplicates).',
             ]);
         }
 
         $batch = $this->importer->import(
             $request->user(),
-            array_column($result['valid'], 'attributes'),
+            array_column($rowsToImport, 'attributes'),
             $payload['filename'],
         );
 
         $skipped = count($result['invalid']);
+        $skippedDuplicates = $skipDuplicates ? count($result['duplicates']) : 0;
 
         $this->discard((string) $validated['upload_key']);
 
+        $status = $skipped === 0
+            ? trans_choice(
+                'Imported :count transaction from :file.|-Imported :count transactions from :file.',
+                $batch->imported_count,
+                ['count' => $batch->imported_count, 'file' => $batch->filename],
+            )
+            : trans_choice(
+                'Imported :count transaction from :file, skipping :skipped unusable rows.|-Imported :count transactions from :file, skipping :skipped unusable rows.',
+                $batch->imported_count,
+                [
+                    'count' => $batch->imported_count,
+                    'file' => $batch->filename,
+                    'skipped' => $skipped,
+                ],
+            );
+
+        if ($skippedDuplicates > 0) {
+            $status .= ' '.trans_choice(
+                ':count duplicate row skipped.|:count duplicate rows skipped.',
+                $skippedDuplicates,
+                ['count' => $skippedDuplicates],
+            );
+        }
+
         return redirect()
             ->route('transactions.index')
-            ->with('status', $skipped === 0
-                ? trans_choice(
-                    'Imported :count transaction from :file.|-Imported :count transactions from :file.',
-                    $batch->imported_count,
-                    ['count' => $batch->imported_count, 'file' => $batch->filename],
-                )
-                : trans_choice(
-                    'Imported :count transaction from :file, skipping :skipped unusable rows.|-Imported :count transactions from :file, skipping :skipped unusable rows.',
-                    $batch->imported_count,
-                    [
-                        'count' => $batch->imported_count,
-                        'file' => $batch->filename,
-                        'skipped' => $skipped,
-                    ],
-                ));
+            ->with('status', $status);
     }
 
     /**

@@ -69,6 +69,35 @@ class TransactionImportParserTest extends TestCase
         $this->parse('');
     }
 
+    public function test_it_parses_gb18030_chinese_export_with_long_preamble_and_utf8_bom(): void
+    {
+        $preambleLines = [];
+        for ($i = 1; $i <= 16; $i++) {
+            $preambleLines[] = "Account metadata line {$i}";
+        }
+
+        $csvUtf8 = implode("\r\n", [
+            ...$preambleLines,
+            '交易时间,收/支,金额,商品说明',
+            '2026-10-01 08:30:00,支出,35.50,瑞幸咖啡',
+            '2026-10-02 18:00:00,收入,5000.00,工资',
+        ]);
+
+        // Encode as GB18030 (matching Alipay/Chinese Windows bank exports)
+        $gb18030 = mb_convert_encoding($csvUtf8, 'GB18030', 'UTF-8');
+
+        $parsed = $this->parse($gb18030);
+
+        $this->assertSame(['交易时间', '收/支', '金额', '商品说明'], $parsed['headers']);
+        $this->assertCount(2, $parsed['rows']);
+        $this->assertSame('瑞幸咖啡', $parsed['rows'][0]['商品说明']);
+        $this->assertSame('收入', $parsed['rows'][1]['收/支']);
+
+        // Also ensure UTF-8 BOM is cleanly stripped from first header
+        $bomParsed = $this->parse("\xEF\xBB\xBFDate,Amount\n2026-10-01,25.00\n");
+        $this->assertSame(['Date', 'Amount'], $bomParsed['headers']);
+    }
+
     private function parse(string $contents): array
     {
         Storage::fake('local');

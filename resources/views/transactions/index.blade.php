@@ -31,6 +31,29 @@
                         </span>
                     @endif
                 </button>
+
+                <div class="relative" x-data="{ exportOpen: false }" @click.outside="exportOpen = false">
+                    <button type="button" @click="exportOpen = !exportOpen"
+                        class="inline-flex items-center gap-2 px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition duration-150">
+                        <svg class="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>{{ __('Export') }}</span>
+                    </button>
+                    <div x-show="exportOpen" x-transition style="display: none;"
+                        class="absolute right-0 mt-2 w-48 rounded-xl bg-[#111218] border border-white/[0.08] shadow-xl py-1.5 z-50">
+                        <a href="{{ route('transactions.export.csv', request()->only(['type', 'category', 'date', 'from', 'to'])) }}"
+                            class="block px-4 py-2 text-xs text-zinc-200 hover:bg-white/[0.05] hover:text-white transition-colors">
+                            {{ __('Download CSV') }}
+                        </a>
+                        <a href="{{ route('transactions.export.statement', request()->only(['type', 'category', 'date', 'from', 'to'])) }}"
+                            target="_blank"
+                            class="block px-4 py-2 text-xs text-zinc-200 hover:bg-white/[0.05] hover:text-white transition-colors">
+                            {{ __('Print / PDF Statement') }}
+                        </a>
+                    </div>
+                </div>
+
                 <a href="{{ route('transactions.create') }}">
                     <x-primary-button class="gap-1.5">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
