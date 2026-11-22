@@ -48,6 +48,11 @@
 /* -------------------------------------------------------------
  * Dark Mode Theme Overrides
  * ------------------------------------------------------------- */
+.dark {
+    color-scheme: dark;
+    accent-color: #10b981;
+}
+
 .dark body {
     background-color: #09090b;
     color: #f4f4f5;
