@@ -106,6 +106,15 @@
   3. **Deduction Priority**: Safely deduct spend with clear priority (e.g., base balance first, then extra balance) preventing balances from going below 0.
   4. **Frontend UI Component**: Dashboard balance breakdown card (Monthly Base Balance, Extra Balance badge, Total Available Balance).
 
+### Feature: Savings Plans (Goal-Based Saving Buckets)
+* **Objective**: Allow users to set target-based savings goals (e.g., save `100 CNY` to buy shoes), deposit/withdraw increments over time, track saving pace toward optional deadlines, and optionally log the final purchase as a ledger expense when completed.
+* **Requirements**:
+  1. **Database Schema**: `savings_plans` (name, target_amount, currency, target_date, category, status, accent, note, purchase_transaction_id, completed_at) and `savings_contributions` (deposit/withdrawal history summed in SQL; `user_id` guarded).
+  2. **Virtual Earmarking & Checkout**: Contributions earmark money without creating fake expenses (showing Total Balance vs. Available Unallocated Balance); completing a funded goal offers **Mark Completed Only** or **Complete & Log Purchase Expense** routed atomically through `ConvertTransactionAmount`.
+  3. **Pace & Progress Engine**: `SavingsPlanService` computes saved/remaining amounts, percentage, and recommended daily/weekly/monthly saving pace when a target date is set.
+  4. **Frontend UI & Dashboard**: `/savings` hub (KPI strip, active/completed tabs, goal cards with quick-deposit presets, contribution history detail view) in dark obsidian theme (zero purple), plus a Dashboard Savings Plans widget and `lang/id.json` parity.
+  5. **Telegram Bot**: `/savings` overview and `/save <amount> <plan>` quick deposit with 100% funded milestone alert.
+
 ---
 
 ## 🛠️ Handy Commands
