@@ -5,6 +5,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 spl_autoload_register(function (string $class): void {
     if (str_starts_with($class, 'App\\')) {
@@ -49,4 +50,39 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->respond(function (SymfonyResponse $response, Throwable $exception, Request $request): SymfonyResponse {
+            $status = $response->getStatusCode();
+
+            if ($status < 400 || $request->is('api/*') || $request->expectsJson()) {
+                return $response;
+            }
+
+            try {
+                $isAuthenticated = auth()->check();
+            } catch (Throwable) {
+                $isAuthenticated = false;
+            }
+
+            try {
+                $rendered = response()->view('errors.error', [
+                    'status' => $status,
+                    'isAuthenticated' => $isAuthenticated,
+                ], $status);
+
+                foreach (['Allow', 'Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining'] as $header) {
+                    if ($response->headers->has($header)) {
+                        $rendered->headers->set($header, $response->headers->get($header));
+                    }
+                }
+
+                foreach ($response->headers->getCookies() as $cookie) {
+                    $rendered->headers->setCookie($cookie);
+                }
+
+                return $rendered;
+            } catch (Throwable) {
+                return $response;
+            }
+        });
     })->create();
