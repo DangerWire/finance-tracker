@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\CategoryService;
 use App\Services\Telegram\TelegramBudgetAlertService;
+use App\Services\UserDataCache;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -28,7 +29,7 @@ class TransactionController extends Controller
      * never split across two pages and a group's count and total describe
      * every row that belongs to it.
      */
-    public function index(Request $request, CategoryService $categories): View
+    public function index(Request $request, CategoryService $categories, UserDataCache $cache): View
     {
         $filters = $request->validate([
             'type' => ['nullable', 'string'],
@@ -43,52 +44,71 @@ class TransactionController extends Controller
         $grouped = ($filters['group'] ?? '1') === '1';
         [$from, $to] = $this->periodFrom($filters);
 
-        $baseCurrency = strtoupper((string) ($request->user()->currency ?? config('finance.base_currency')));
+        $user = $request->user();
+        $baseCurrency = strtoupper((string) ($user->currency ?? config('finance.base_currency')));
 
         $days = null;
         $groups = collect();
         $transactions = null;
 
         if ($grouped) {
-            $days = $this->applyFilters($request->user()->transactions()->getQuery(), $filters, $from, $to)
+            $days = $this->applyFilters($user->transactions()->getQuery(), $filters, $from, $to)
                 ->selectRaw('DATE(occurred_at) as day')
                 ->distinct()
                 ->orderByDesc('day')
                 ->paginate(15)
                 ->withQueryString();
 
-            $groups = $this->groupsFor($request->user(), $filters, $from, $to, $days->pluck('day')->all());
+            $groups = $this->groupsFor($user, $filters, $from, $to, $days->pluck('day')->all());
         } else {
-            $transactions = $this->applyFilters($request->user()->transactions()->with('splits')->getQuery(), $filters, $from, $to)
+            $transactions = $this->applyFilters($user->transactions()->with('splits')->getQuery(), $filters, $from, $to)
                 ->latest('occurred_at')
                 ->paginate(15)
                 ->withQueryString();
         }
 
         // Totals are summed from the frozen base snapshot rather than the
-        // original amount, so mixed currencies never add up incorrectly. The
-        // snapshot's currency is matched as well: a row converted into an
-        // earlier base currency still carries a base_amount, and summing it
-        // alongside current rows would blend two currencies into one figure.
-        $summary = $request->user()->transactions()
-            ->whereNotNull('base_amount')
-            ->where('base_currency', $baseCurrency)
-            ->selectRaw('type, SUM(base_amount) as total')
-            ->groupBy('type')
-            ->pluck('total', 'type');
+        // original amount, so mixed currencies never add up incorrectly. Cached
+        // per user version and auto-invalidated on any transaction write.
+        $summary = $cache->remember(
+            $user->id,
+            "tx_summary:{$baseCurrency}",
+            function () use ($user, $baseCurrency): array {
+                $aggregates = $user->transactions()
+                    ->selectRaw(
+                        'COALESCE(SUM(CASE WHEN base_amount IS NOT NULL AND base_currency = ? AND type = ? THEN base_amount ELSE 0 END), 0) as income, '.
+                        'COALESCE(SUM(CASE WHEN base_amount IS NOT NULL AND base_currency = ? AND type = ? THEN base_amount ELSE 0 END), 0) as expenses, '.
+                        'COALESCE(SUM(CASE WHEN base_amount IS NULL OR base_currency != ? THEN 1 ELSE 0 END), 0) as excluded_count',
+                        [
+                            $baseCurrency, TransactionType::Income->value,
+                            $baseCurrency, TransactionType::Expense->value,
+                            $baseCurrency,
+                        ]
+                    )
+                    ->first();
 
-        // Rounded to the precision the base snapshot is stored at, so totals do
-        // not display float noise such as 16025.940000000002.
-        $income = round((float) ($summary[TransactionType::Income->value] ?? 0), 4);
-        $expenses = round((float) ($summary[TransactionType::Expense->value] ?? 0), 4);
+                return [
+                    'income' => round((float) ($aggregates?->income ?? 0), 4),
+                    'expenses' => round((float) ($aggregates?->expenses ?? 0), 4),
+                    'excluded_count' => (int) ($aggregates?->excluded_count ?? 0),
+                ];
+            }
+        );
 
-        // Anything the cards cannot legitimately include: rows with no rate at
-        // all, plus rows still sitting in a retired base currency.
-        $excludedCount = $request->user()->transactions()
-            ->where(fn ($query) => $query
-                ->whereNull('base_amount')
-                ->orWhere('base_currency', '!=', $baseCurrency))
-            ->count();
+        $income = $summary['income'];
+        $expenses = $summary['expenses'];
+        $excludedCount = $summary['excluded_count'];
+
+        $calendarMonth = $this->calendarMonth($filters);
+        $calendarKey = 'tx_cal:'.$calendarMonth->format('Y-m').':'.md5(json_encode([
+            'type' => $filters['type'] ?? null,
+            'category' => $filters['category'] ?? null,
+        ]));
+        $activityByDay = collect($cache->remember(
+            $user->id,
+            $calendarKey,
+            fn (): array => $this->activityByDay($request, $filters, $calendarMonth)->all()
+        ));
 
         return view('transactions.index', [
             'transactions' => $transactions,
@@ -99,15 +119,15 @@ class TransactionController extends Controller
             'day' => $filters['date'] ?? null,
             'from' => $filters['from'] ?? null,
             'to' => $filters['to'] ?? null,
-            'calendarMonth' => $this->calendarMonth($filters),
-            'activityByDay' => $this->activityByDay($request, $filters, $this->calendarMonth($filters)),
+            'calendarMonth' => $calendarMonth,
+            'activityByDay' => $activityByDay,
             'income' => $income,
             'expenses' => $expenses,
             'balance' => round($income - $expenses, 4),
             'baseCurrency' => $baseCurrency,
             'unconvertedCount' => $excludedCount,
             'types' => TransactionType::cases(),
-            'categories' => $categories->forUser($request->user()->id),
+            'categories' => $categories->forUser($user->id),
         ]);
     }
 
@@ -359,7 +379,8 @@ class TransactionController extends Controller
             ->whereBetween('occurred_at', [$start, $end])
             ->selectRaw('DATE(occurred_at) as day, count(*) as total')
             ->groupBy('day')
-            ->pluck('total', 'day');
+            ->pluck('total', 'day')
+            ->map(fn (mixed $total): int => (int) $total);
     }
 
     /**

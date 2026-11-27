@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\TransactionType;
-use App\Models\Budget;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -11,7 +10,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * Computes spending statistics in SQL so the model never performs arithmetic.
+ * Computes spending statistics from frozen base-currency snapshots so the AI
+ * model never performs arithmetic.
  *
  * Every figure handed to the language model is produced here. The model only
  * narrates these values, which is what keeps invented numbers out of the
@@ -37,21 +37,30 @@ class SpendingStatsService
     /**
      * Build the full statistics payload for a user.
      *
-     * Every figure is expressed in the base currency. There is deliberately no
-     * unconverted mode: summing raw amounts across currencies is meaningless,
-     * and reporting per-currency totals instead produced a page that could not
-     * answer the question it existed to answer.
+     * Every figure is expressed in the base currency. Fetches the comparison
+     * window once (with splits eager-loaded) so remote database latency does
+     * not multiply across redundant round-trips.
      *
      * @return array<string, mixed>
      */
-    public function forUser(int $userId, ?CarbonImmutable $through = null): array
+    public function forUser(int $userId, ?CarbonImmutable $through = null, ?User $user = null): array
     {
         $through ??= CarbonImmutable::now();
 
-        $user = User::find($userId);
+        $user ??= User::find($userId);
         $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
 
-        $totals = $this->monthlyTotals($userId, $through);
+        $monthStart = $through->startOfMonth();
+        $monthEnd = $monthStart->endOfMonth();
+        $windowStart = $through->subMonthsNoOverflow(self::PERIODS + 1)->startOfMonth();
+
+        /** @var Collection<int, Transaction> $windowExpenses */
+        $windowExpenses = $this->expenseQuery($userId, $baseCurrency)
+            ->with('splits')
+            ->whereBetween('occurred_at', [$windowStart, $monthEnd])
+            ->get();
+
+        $totals = $this->monthlyTotalsFrom($windowExpenses);
         $currentPeriod = $through->format('Y-m');
 
         $periods = [];
@@ -65,6 +74,12 @@ class SpendingStatsService
 
         $currentTotals = $totals[$currentPeriod] ?? 0.0;
         $previous = $previousTotals[array_key_first($previousTotals)] ?? 0.0;
+
+        /** @var Collection<int, Transaction> $currentMonthExpenses */
+        $currentMonthExpenses = $windowExpenses
+            ->filter(fn (Transaction $tx): bool => $tx->occurred_at !== null
+                && $tx->occurred_at->betweenIncluded($monthStart, $monthEnd))
+            ->values();
 
         return [
             'display_currency' => $baseCurrency,
@@ -92,25 +107,22 @@ class SpendingStatsService
                     'expenses' => round($previousTotals[$key], 2),
                 ];
             }, array_keys($previousTotals)),
-            'categories' => $this->categoryBreakdown($userId, $through),
-            'largest_expense' => $this->largestExpense($userId, $through),
-            'transaction_count' => $this->transactionCount($userId, $through),
-            'budgets' => $this->budgetOverview($userId, $through),
+            'categories' => $this->categoryBreakdownFrom($windowExpenses, $currentMonthExpenses, $through),
+            'largest_expense' => $this->largestExpenseFrom($currentMonthExpenses),
+            'transaction_count' => $currentMonthExpenses->count(),
+            'budgets' => $this->budgetOverview($userId, $through, $user, $currentMonthExpenses),
         ];
     }
 
     /**
      * Expense totals per month, keyed by Y-m.
      *
+     * @param  Collection<int, Transaction>  $expenses
      * @return array<string, float>
      */
-    private function monthlyTotals(int $userId, CarbonImmutable $through): array
+    private function monthlyTotalsFrom(Collection $expenses): array
     {
-        $start = $through->subMonthsNoOverflow(self::PERIODS + 1)->startOfMonth();
-
-        return $this->expenseQuery($userId)
-            ->where('occurred_at', '>=', $start)
-            ->get(['occurred_at', 'base_amount'])
+        return $expenses
             ->groupBy(fn (Transaction $transaction): string => $transaction->occurred_at->format('Y-m'))
             ->map(fn (Collection $group): float => (float) $group->sum('base_amount'))
             ->all();
@@ -120,30 +132,33 @@ class SpendingStatsService
      * Per-category totals for the current month, including change against the
      * previous month and a flag for unusual spending.
      *
+     * @param  Collection<int, Transaction>  $windowExpenses
+     * @param  Collection<int, Transaction>  $currentMonthExpenses
      * @return array<int, array<string, mixed>>
      */
-    private function categoryBreakdown(int $userId, CarbonImmutable $through): array
-    {
+    private function categoryBreakdownFrom(
+        Collection $windowExpenses,
+        Collection $currentMonthExpenses,
+        CarbonImmutable $through,
+    ): array {
         $monthStart = $through->startOfMonth();
         $previousStart = $through->subMonthsNoOverflow(1)->startOfMonth();
-
-        // The period runs to the end of the month, not to the instant of the
-        // query. Bounding at "now" would drop anything recorded earlier today
-        // whose time of day is later than the clock, which is most of a day's
-        // entries when the app's timezone is not the one the user is typing
-        // in. It would also disagree with monthlyTotals, which is unbounded,
-        // so the headline total and the category breakdown would not add up.
-        $monthEnd = $monthStart->endOfMonth();
-
-        // The previous month ends on its last day in full. subDay() alone
-        // would land on midnight at the start of that day and quietly discard
-        // everything recorded during it.
         $previousEnd = $monthStart->subDay()->endOfDay();
+        $historyStart = $through->subMonthsNoOverflow(self::PERIODS)->startOfMonth();
 
-        $current = $this->categoryTotalsBetween($userId, $monthStart, $monthEnd);
-        $previous = $this->categoryTotalsBetween($userId, $previousStart, $previousEnd);
+        $previousMonthExpenses = $windowExpenses->filter(
+            fn (Transaction $tx): bool => $tx->occurred_at !== null
+                && $tx->occurred_at->betweenIncluded($previousStart, $previousEnd)
+        );
 
-        $history = $this->categoryHistory($userId, $through);
+        $historyExpenses = $windowExpenses->filter(
+            fn (Transaction $tx): bool => $tx->occurred_at !== null
+                && $tx->occurred_at->betweenIncluded($historyStart, $previousEnd)
+        );
+
+        $current = $this->categoryTotalsFrom($currentMonthExpenses);
+        $previous = $this->categoryTotalsFrom($previousMonthExpenses);
+        $history = $this->categoryHistoryFrom($historyExpenses);
 
         $rows = [];
 
@@ -183,17 +198,13 @@ class SpendingStatsService
     }
 
     /**
-     * Category totals for a single month, keyed by category and currency.
+     * Category totals for a collection of transactions, keyed by category and currency.
      *
+     * @param  Collection<int, Transaction>  $transactions
      * @return array<string, array{category: string, currency: string, total: float}>
      */
-    private function categoryTotalsBetween(int $userId, CarbonImmutable $from, CarbonImmutable $to): array
+    private function categoryTotalsFrom(Collection $transactions): array
     {
-        $transactions = $this->expenseQuery($userId)
-            ->with('splits')
-            ->whereBetween('occurred_at', [$from, $to])
-            ->get();
-
         $totals = [];
 
         foreach ($transactions as $transaction) {
@@ -232,22 +243,11 @@ class SpendingStatsService
     /**
      * Monthly category totals across the compared window, used for averages.
      *
+     * @param  Collection<int, Transaction>  $transactions
      * @return array<string, array{averages: array<int, float>}>
      */
-    private function categoryHistory(int $userId, CarbonImmutable $through): array
+    private function categoryHistoryFrom(Collection $transactions): array
     {
-        // The current month is excluded from the baseline: comparing this
-        // month's spend against an average that already includes it would
-        // suppress the very spikes the check is meant to catch.
-        $start = $through->subMonthsNoOverflow(self::PERIODS)->startOfMonth();
-
-        $transactions = $this->expenseQuery($userId)
-            ->with('splits')
-            // endOfDay keeps the final day of the baseline window, which a
-            // bare subDay() would cut off at midnight.
-            ->whereBetween('occurred_at', [$start, $through->startOfMonth()->subDay()->endOfDay()])
-            ->get();
-
         $rows = [];
 
         foreach ($transactions as $transaction) {
@@ -280,13 +280,14 @@ class SpendingStatsService
     /**
      * The single largest expense in the current month.
      *
+     * @param  Collection<int, Transaction>  $currentMonthExpenses
      * @return array<string, mixed>|null
      */
-    private function largestExpense(int $userId, CarbonImmutable $through): ?array
+    private function largestExpenseFrom(Collection $currentMonthExpenses): ?array
     {
-        $transaction = $this->expenseQuery($userId)
-            ->whereBetween('occurred_at', [$through->startOfMonth(), $through->startOfMonth()->endOfMonth()])
-            ->orderByDesc('base_amount')
+        /** @var Transaction|null $transaction */
+        $transaction = $currentMonthExpenses
+            ->sortByDesc(fn (Transaction $tx): float => (float) $tx->base_amount)
             ->first();
 
         if ($transaction === null) {
@@ -305,16 +306,6 @@ class SpendingStatsService
     }
 
     /**
-     * How many expenses the user recorded this month.
-     */
-    private function transactionCount(int $userId, CarbonImmutable $through): int
-    {
-        return $this->expenseQuery($userId)
-            ->whereBetween('occurred_at', [$through->startOfMonth(), $through->startOfMonth()->endOfMonth()])
-            ->count();
-    }
-
-    /**
      * Base query for expenses belonging to a user.
      *
      * Rows are excluded unless their snapshot was taken into the base currency
@@ -323,10 +314,12 @@ class SpendingStatsService
      * a different base applied; including either would add numbers
      * denominated in different currencies together.
      */
-    private function expenseQuery(int $userId): Builder
+    private function expenseQuery(int $userId, ?string $baseCurrency = null): Builder
     {
-        $user = User::find($userId);
-        $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
+        if ($baseCurrency === null) {
+            $user = User::find($userId);
+            $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
+        }
 
         return Transaction::query()
             ->where('user_id', $userId)
@@ -350,6 +343,7 @@ class SpendingStatsService
     /**
      * Compute budget vs actual spending for a user in a given month.
      *
+     * @param  Collection<int, Transaction>|null  $preloadedMonthExpenses
      * @return array{
      *     month: string,
      *     currency: string,
@@ -370,28 +364,30 @@ class SpendingStatsService
      *     }>
      * }
      */
-    public function budgetOverview(int $userId, ?CarbonImmutable $through = null): array
-    {
+    public function budgetOverview(
+        int $userId,
+        ?CarbonImmutable $through = null,
+        ?User $user = null,
+        ?Collection $preloadedMonthExpenses = null,
+    ): array {
         $through ??= CarbonImmutable::now();
         $periodMonth = $through->format('Y-m');
-        $user = User::find($userId);
+        $user ??= User::find($userId);
         $baseCurrency = strtoupper((string) ($user?->currency ?? config('finance.base_currency')));
 
-        $this->recurringBudgets->ensureForUserMonth($userId, $periodMonth);
+        $budgets = $this->recurringBudgets->ensureAndListForUserMonth($userId, $periodMonth, $user);
 
-        $monthStart = $through->startOfMonth();
-        $monthEnd = $through->endOfMonth();
+        if ($preloadedMonthExpenses !== null) {
+            $transactions = $preloadedMonthExpenses;
+        } else {
+            $monthStart = $through->startOfMonth();
+            $monthEnd = $through->endOfMonth();
 
-        $budgets = Budget::query()
-            ->where('user_id', $userId)
-            ->where('period_month', $periodMonth)
-            ->orderBy('category')
-            ->get();
-
-        $transactions = $this->expenseQuery($userId)
-            ->with('splits')
-            ->whereBetween('occurred_at', [$monthStart, $monthEnd])
-            ->get();
+            $transactions = $this->expenseQuery($userId, $baseCurrency)
+                ->with('splits')
+                ->whereBetween('occurred_at', [$monthStart, $monthEnd])
+                ->get();
+        }
 
         $actuals = [];
 

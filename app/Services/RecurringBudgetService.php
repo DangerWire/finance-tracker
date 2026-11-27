@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Budget;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Collection;
 
 /**
  * Carries recurring monthly budgets forward into newer months.
@@ -19,57 +20,91 @@ class RecurringBudgetService
     /**
      * Ensure all active recurring budgets from earlier months exist for a user in the target month (YYYY-MM).
      */
-    public function ensureForUserMonth(int $userId, string $targetMonth): int
+    public function ensureForUserMonth(int $userId, string $targetMonth, ?User $user = null): int
     {
-        $priorBudgets = Budget::query()
+        return $this->syncForUserMonth($userId, $targetMonth, $user)['created'];
+    }
+
+    /**
+     * Ensure recurring budgets exist for the target month and return the month's budgets sorted by category
+     * using a single read query in the common steady state.
+     *
+     * @return Collection<int, Budget>
+     */
+    public function ensureAndListForUserMonth(int $userId, string $targetMonth, ?User $user = null): Collection
+    {
+        return $this->syncForUserMonth($userId, $targetMonth, $user)['budgets'];
+    }
+
+    /**
+     * Load budgets up to $targetMonth once, materialize missing recurring rows, and return both count and list.
+     *
+     * @return array{created: int, budgets: Collection<int, Budget>}
+     */
+    private function syncForUserMonth(int $userId, string $targetMonth, ?User $user = null): array
+    {
+        $allBudgets = Budget::query()
             ->where('user_id', $userId)
-            ->where('period_month', '<', $targetMonth)
+            ->where('period_month', '<=', $targetMonth)
             ->orderByDesc('period_month')
             ->orderByDesc('id')
             ->get();
 
-        if ($priorBudgets->isEmpty()) {
-            return 0;
-        }
+        /** @var Collection<int, Budget> $currentBudgets */
+        $currentBudgets = $allBudgets
+            ->filter(fn (Budget $budget): bool => $budget->period_month === $targetMonth)
+            ->values();
 
-        /** @var array<string, Budget> $latestByCategory */
-        $latestByCategory = [];
+        /** @var array<string, Budget> $latestPriorByCategory */
+        $latestPriorByCategory = [];
 
-        foreach ($priorBudgets as $budget) {
-            if (! isset($latestByCategory[$budget->category])) {
-                $latestByCategory[$budget->category] = $budget;
+        foreach ($allBudgets as $budget) {
+            if ($budget->period_month >= $targetMonth) {
+                continue;
+            }
+
+            if (! isset($latestPriorByCategory[$budget->category])) {
+                $latestPriorByCategory[$budget->category] = $budget;
             }
         }
 
         $recurringToCarry = array_filter(
-            $latestByCategory,
+            $latestPriorByCategory,
             fn (Budget $budget): bool => (bool) $budget->is_recurring
         );
 
         if ($recurringToCarry === []) {
-            return 0;
+            return [
+                'created' => 0,
+                'budgets' => $currentBudgets->sortBy('category')->values(),
+            ];
         }
 
-        $user = User::find($userId);
+        $existingCategories = array_flip($currentBudgets->pluck('category')->all());
+        $missing = array_filter(
+            $recurringToCarry,
+            fn (Budget $latest): bool => ! isset($existingCategories[$latest->category])
+        );
+
+        if ($missing === []) {
+            return [
+                'created' => 0,
+                'budgets' => $currentBudgets->sortBy('category')->values(),
+            ];
+        }
+
+        $user ??= User::find($userId);
 
         if ($user === null) {
-            return 0;
+            return [
+                'created' => 0,
+                'budgets' => $currentBudgets->sortBy('category')->values(),
+            ];
         }
-
-        $existingCategories = array_flip(
-            $user->budgets()
-                ->where('period_month', $targetMonth)
-                ->pluck('category')
-                ->all()
-        );
 
         $created = 0;
 
-        foreach ($recurringToCarry as $latest) {
-            if (isset($existingCategories[$latest->category])) {
-                continue;
-            }
-
+        foreach ($missing as $latest) {
             try {
                 $budget = $user->budgets()->firstOrCreate(
                     [
@@ -82,15 +117,28 @@ class RecurringBudgetService
                     ]
                 );
 
+                $currentBudgets->push($budget);
+
                 if ($budget->wasRecentlyCreated) {
                     $created++;
                 }
             } catch (UniqueConstraintViolationException) {
                 // Another concurrent request created this month's budget row first.
+                $existing = $user->budgets()
+                    ->where('category', $latest->category)
+                    ->where('period_month', $targetMonth)
+                    ->first();
+
+                if ($existing !== null) {
+                    $currentBudgets->push($existing);
+                }
             }
         }
 
-        return $created;
+        return [
+            'created' => $created,
+            'budgets' => $currentBudgets->unique('id')->sortBy('category')->values(),
+        ];
     }
 
     /**

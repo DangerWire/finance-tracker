@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Services\SpendingInsightService;
 use App\Services\SpendingStatsService;
+use App\Services\UserDataCache;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,9 +19,17 @@ class SpendingInsightController extends Controller
      * The numbers render without any AI involvement, so the page still works
      * when no provider key is configured.
      */
-    public function index(Request $request, SpendingStatsService $stats): View
+    public function index(Request $request, SpendingStatsService $stats, UserDataCache $cache): View
     {
-        $payload = $stats->forUser($request->user()->id);
+        $user = $request->user();
+        $baseCurrency = strtoupper((string) ($user->currency ?? config('finance.base_currency')));
+        $today = CarbonImmutable::now()->toDateString();
+
+        $payload = $cache->remember(
+            $user->id,
+            "insights:{$today}:{$baseCurrency}",
+            fn (): array => $stats->forUser($user->id, null, $user)
+        );
 
         return view('insights.index', [
             'stats' => $payload,
@@ -38,8 +48,17 @@ class SpendingInsightController extends Controller
         Request $request,
         SpendingStatsService $stats,
         SpendingInsightService $insights,
+        UserDataCache $cache,
     ): RedirectResponse|View {
-        $payload = $stats->forUser($request->user()->id);
+        $user = $request->user();
+        $baseCurrency = strtoupper((string) ($user->currency ?? config('finance.base_currency')));
+        $today = CarbonImmutable::now()->toDateString();
+
+        $payload = $cache->remember(
+            $user->id,
+            "insights:{$today}:{$baseCurrency}",
+            fn (): array => $stats->forUser($user->id, null, $user)
+        );
 
         if (! $this->hasEnoughData($payload)) {
             return back()->withErrors([

@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateBudgetRequest;
 use App\Models\Budget;
 use App\Services\CategoryService;
 use App\Services\SpendingStatsService;
+use App\Services\UserDataCache;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,14 +18,24 @@ class BudgetController extends Controller
     /**
      * Display a listing of monthly category budgets and progress.
      */
-    public function index(Request $request, SpendingStatsService $stats, CategoryService $categories): View
-    {
+    public function index(
+        Request $request,
+        SpendingStatsService $stats,
+        CategoryService $categories,
+        UserDataCache $cache,
+    ): View {
+        $user = $request->user();
         $rawMonth = (string) $request->input('month', now()->format('Y-m'));
         $monthDate = $this->parseMonth($rawMonth) ?? CarbonImmutable::now()->startOfMonth();
         $month = $monthDate->format('Y-m');
+        $baseCurrency = strtoupper((string) ($user->currency ?? config('finance.base_currency')));
 
-        $overview = $stats->budgetOverview($request->user()->id, $monthDate);
-        $userCategories = $categories->forUser($request->user()->id);
+        $overview = $cache->remember(
+            $user->id,
+            "budgets:{$month}:{$baseCurrency}",
+            fn (): array => $stats->budgetOverview($user->id, $monthDate, $user)
+        );
+        $userCategories = $categories->forUser($user->id);
 
         return view('budgets.index', [
             'overview' => $overview,
@@ -33,7 +44,7 @@ class BudgetController extends Controller
             'prevMonth' => $monthDate->subMonthNoOverflow()->format('Y-m'),
             'nextMonth' => $monthDate->addMonthNoOverflow()->format('Y-m'),
             'categories' => $userCategories,
-            'baseCurrency' => strtoupper((string) ($request->user()->currency ?? config('finance.base_currency'))),
+            'baseCurrency' => $baseCurrency,
         ]);
     }
 

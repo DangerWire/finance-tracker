@@ -179,9 +179,9 @@
                         <div class="border-b border-white/[0.06] px-6 py-4 flex items-center justify-between">
                             <div class="flex items-center gap-2.5">
                                 <h2 class="font-semibold text-sm text-zinc-100">{{ __('Recent transactions') }}</h2>
-                                @if ($recentTransactions->isNotEmpty())
+                                @if ($recentTransactions !== [])
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono-num font-medium bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-                                        {{ $recentTransactions->count() }}
+                                        {{ count($recentTransactions) }}
                                     </span>
                                 @endif
                             </div>
@@ -190,7 +190,7 @@
                             </a>
                         </div>
 
-                        @if ($recentTransactions->isEmpty())
+                        @if ($recentTransactions === [])
                             <div class="px-6 py-12 text-center">
                                 <div class="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3 text-zinc-500">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,24 +214,24 @@
                                         <div class="flex min-w-0 flex-wrap items-center gap-3">
                                             <span @class([
                                                 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border shrink-0',
-                                                'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' => $transaction->type === \App\Enums\TransactionType::Income,
-                                                'bg-rose-500/10 text-rose-400 border-rose-500/20' => $transaction->type === \App\Enums\TransactionType::Expense,
-                                            ])>{{ __($transaction->type->label()) }}</span>
+                                                'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' => $transaction['type'] === \App\Enums\TransactionType::Income->value,
+                                                'bg-rose-500/10 text-rose-400 border-rose-500/20' => $transaction['type'] === \App\Enums\TransactionType::Expense->value,
+                                            ])>{{ __($transaction['type_label']) }}</span>
 
-                                            @if ($transaction->isSplit())
+                                            @if ($transaction['is_split'])
                                                 <span class="inline-flex items-center gap-1 rounded-md bg-zinc-800/80 px-2 py-0.5 text-xs font-medium text-zinc-300 border border-zinc-700">
                                                     <span>{{ __('Split') }}</span>
-                                                    <span class="text-zinc-500 font-mono-num">({{ $transaction->splits->count() }})</span>
+                                                    <span class="text-zinc-500 font-mono-num">({{ $transaction['splits_count'] }})</span>
                                                 </span>
                                             @else
-                                                <span class="text-sm font-medium text-zinc-200">{{ $transaction->category ?? '—' }}</span>
+                                                <span class="text-sm font-medium text-zinc-200">{{ $transaction['category'] ?? '—' }}</span>
                                             @endif
 
                                             <span class="text-xs text-zinc-400 truncate">
-                                                <span class="font-mono-num text-zinc-500">{{ $transaction->occurred_at->format('M d · H:i') }}</span>
-                                                @if ($transaction->note)
+                                                <span class="font-mono-num text-zinc-500">{{ $transaction['occurred_at_formatted'] }}</span>
+                                                @if ($transaction['note'])
                                                     <span class="mx-1 text-zinc-600">·</span>
-                                                    <span>{{ \Illuminate\Support\Str::limit($transaction->note, 40) }}</span>
+                                                    <span>{{ \Illuminate\Support\Str::limit($transaction['note'], 40) }}</span>
                                                 @endif
                                             </span>
                                         </div>
@@ -239,24 +239,24 @@
                                         <div class="flex items-center gap-4 shrink-0">
                                             <div class="whitespace-nowrap text-right text-sm font-mono-num font-medium">
                                                 <span @class([
-                                                    'text-emerald-400' => $transaction->type === \App\Enums\TransactionType::Income,
-                                                    'text-zinc-200' => $transaction->type === \App\Enums\TransactionType::Expense,
+                                                    'text-emerald-400' => $transaction['type'] === \App\Enums\TransactionType::Income->value,
+                                                    'text-zinc-200' => $transaction['type'] === \App\Enums\TransactionType::Expense->value,
                                                 ])>
-                                                    {{ $transaction->type->sign() > 0 ? '+' : '−' }}{{ number_format($transaction->amount, 2) }}
-                                                    <span class="text-xs font-normal text-zinc-500 ml-0.5">{{ $transaction->currency }}</span>
+                                                    {{ $transaction['sign'] > 0 ? '+' : '−' }}{{ number_format($transaction['amount'], 2) }}
+                                                    <span class="text-xs font-normal text-zinc-500 ml-0.5">{{ $transaction['currency'] }}</span>
                                                 </span>
-                                                @if ($transaction->base_amount !== null && $transaction->currency !== $transaction->base_currency)
+                                                @if ($transaction['base_amount'] !== null && $transaction['currency'] !== $transaction['base_currency'])
                                                     <span class="block text-[11px] font-normal text-zinc-500">
-                                                        {{ $transaction->type->sign() > 0 ? '+' : '−' }}{{ number_format($transaction->base_amount, 2) }}
-                                                        {{ $transaction->base_currency }}
+                                                        {{ $transaction['sign'] > 0 ? '+' : '−' }}{{ number_format($transaction['base_amount'], 2) }}
+                                                        {{ $transaction['base_currency'] }}
                                                     </span>
                                                 @endif
                                             </div>
 
                                             <div class="whitespace-nowrap text-xs">
-                                                <a href="{{ route('transactions.show', $transaction) }}"
+                                                <a href="{{ route('transactions.show', $transaction['id']) }}"
                                                     class="text-zinc-400 hover:text-zinc-200 transition-colors mr-2.5">{{ __('View') }}</a>
-                                                <a href="{{ route('transactions.edit', $transaction) }}"
+                                                <a href="{{ route('transactions.edit', $transaction['id']) }}"
                                                     class="text-emerald-400 hover:text-emerald-300 transition-colors font-medium">{{ __('Edit') }}</a>
                                             </div>
                                         </div>
@@ -454,7 +454,7 @@
                             </a>
                         </div>
 
-                        @if ($upcomingRecurring->isEmpty())
+                        @if ($upcomingRecurring === [])
                             <div class="p-6 text-center space-y-3">
                                 <p class="text-xs text-zinc-500">{{ __('No active recurring schedules.') }}</p>
                                 <a href="{{ route('recurring.create') }}"
@@ -468,19 +468,19 @@
                                     <div class="px-5 py-3 flex items-center justify-between gap-3 hover:bg-white/[0.02] transition-colors">
                                         <div class="min-w-0">
                                             <p class="text-xs font-medium text-zinc-200 truncate">
-                                                {{ $item->name ?: ($item->category ?: '—') }}
+                                                {{ $item['name'] ?: ($item['category'] ?: '—') }}
                                             </p>
                                             <p class="text-[11px] text-zinc-500 font-mono-num mt-0.5">
-                                                {{ $item->next_occurrence_on->format('M d') }} · {{ $item->frequency->label() }}
+                                                {{ $item['next_occurrence_formatted'] }} · {{ $item['frequency_label'] }}
                                             </p>
                                         </div>
                                         <span @class([
                                             'text-xs font-mono-num font-medium whitespace-nowrap shrink-0',
-                                            'text-emerald-400' => $item->type === \App\Enums\TransactionType::Income,
-                                            'text-zinc-200' => $item->type === \App\Enums\TransactionType::Expense,
+                                            'text-emerald-400' => $item['type'] === \App\Enums\TransactionType::Income->value,
+                                            'text-zinc-200' => $item['type'] === \App\Enums\TransactionType::Expense->value,
                                         ])>
-                                            {{ $item->type->sign() > 0 ? '+' : '−' }}{{ number_format((float) $item->amount, 2) }}
-                                            <span class="text-[10px] text-zinc-500 font-normal">{{ $item->currency }}</span>
+                                            {{ $item['sign'] > 0 ? '+' : '−' }}{{ number_format($item['amount'], 2) }}
+                                            <span class="text-[10px] text-zinc-500 font-normal">{{ $item['currency'] }}</span>
                                         </span>
                                     </div>
                                 @endforeach

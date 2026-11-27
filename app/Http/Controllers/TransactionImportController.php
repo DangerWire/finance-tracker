@@ -6,6 +6,7 @@ use App\Http\Requests\ImportTransactionsRequest;
 use App\Models\TransactionImport;
 use App\Services\TransactionImportParser;
 use App\Services\TransactionImportService;
+use App\Services\UserDataCache;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -249,7 +250,7 @@ class TransactionImportController extends Controller
      *
      * This is the recovery path for a file imported twice or mapped wrongly.
      */
-    public function destroy(Request $request, TransactionImport $import): RedirectResponse
+    public function destroy(Request $request, TransactionImport $import, UserDataCache $cache): RedirectResponse
     {
         abort_unless($import->user_id === $request->user()->id, 403);
 
@@ -259,6 +260,7 @@ class TransactionImportController extends Controller
         // batch record are removed together deliberately here.
         $import->transactions()->delete();
         $import->delete();
+        $cache->bump($import->user_id);
 
         return redirect()
             ->route('transaction-imports.index')
